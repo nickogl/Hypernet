@@ -1,0 +1,13 @@
+{
+  "[csharp]": {
+    "editor.defaultFormatter": "ms-dotnettools.csharp",
+    "editor.formatOnSave": true
+  },
+  "[json][jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode",
+    "editor.formatOnSave": true
+  },
+  "dotnet.formatting.organizeImportsOnFormat": true,
+  "dotnet.completion.showCompletionItemsFromUnimportedNamespaces": true,
+  "dotnet.defaultSolution": "Hypernet.slnx"
+}
