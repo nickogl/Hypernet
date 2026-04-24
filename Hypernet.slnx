@@ -1,2 +1,4 @@
 <Solution>
+  <Project Path="Hypernet.Tests/Hypernet.Tests.csproj" />
+  <Project Path="Hypernet/Hypernet.csproj" />
 </Solution>
