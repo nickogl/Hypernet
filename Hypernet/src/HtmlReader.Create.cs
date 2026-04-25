@@ -21,10 +21,11 @@ public ref partial struct HtmlReader
 		options ??= _defaultOptions;
 		ValidateOptions(options);
 
-		var buffer = GetBuffer(options, null, usedLength: 0, requiredLength: data.Length);
-		data.CopyTo(buffer);
+		var length = Math.Min(data.Length, options.MaxBufferSize);
+		var buffer = GetBuffer(options, null, usedLength: 0, requiredLength: length);
+		data[..length].CopyTo(buffer);
 
-		var input = new Input() { Buffer = buffer, Length = data.Length, Options = options };
+		var input = new Input() { Buffer = buffer, Length = length, Options = options };
 		return new HtmlReader(input);
 	}
 
@@ -51,19 +52,24 @@ public ref partial struct HtmlReader
 		data = SkipPreamble(data, encoding);
 		var buffer = GetBuffer(options, null, usedLength: 0, requiredLength: encoding.GetMaxCharCount((int)data.Length));
 		var length = 0;
-		if (data.IsSingleSegment)
+		var decoder = encoding.GetDecoder();
+		foreach (var segment in data)
 		{
-			length = encoding.GetChars(data.FirstSpan, buffer);
-		}
-		else
-		{
-			var decoder = encoding.GetDecoder();
-			foreach (var segment in data)
+			var writableLength = Math.Min(options.MaxBufferSize - length, buffer.Length - length);
+			if (writableLength <= 0)
 			{
-				length += decoder.GetChars(segment.Span, buffer.AsSpan(length), flush: false);
+				break;
 			}
 
-			length += decoder.GetChars([], buffer.AsSpan(length), flush: true);
+			decoder.Convert(segment.Span, buffer.AsSpan(length, writableLength), flush: false, out _, out var charsUsed, out _);
+			length += charsUsed;
+		}
+
+		var flushWritableLength = Math.Min(options.MaxBufferSize - length, buffer.Length - length);
+		if (flushWritableLength > 0)
+		{
+			decoder.Convert([], buffer.AsSpan(length, flushWritableLength), flush: true, out _, out var charsUsed, out _);
+			length += charsUsed;
 		}
 
 		return new HtmlReader(new Input() { Buffer = buffer, Length = length, Options = options });
@@ -197,10 +203,17 @@ public ref partial struct HtmlReader
 
 			void DecodeSpanToBuffer(ReadOnlySpan<byte> data, DecodingState decoding, bool flush)
 			{
-				buffer = GetBuffer(options, buffer, length, length + decoding.Encoding.GetMaxCharCount(data.Length));
-				length += decoding.Decoder.GetChars(data, buffer.AsSpan(length), flush);
-			}
+				var logicalRemaining = options.MaxBufferSize - length;
+				if (logicalRemaining <= 0)
+				{
+					return;
+				}
 
+				buffer = GetBuffer(options, buffer, length, length + decoding.Encoding.GetMaxCharCount(data.Length));
+				var writableLength = Math.Min(logicalRemaining, buffer.Length - length);
+				decoding.Decoder.Convert(data, buffer.AsSpan(length, writableLength), flush, out _, out var charsUsed, out _);
+				length += charsUsed;
+			}
 		}
 	}
 
@@ -293,14 +306,30 @@ public ref partial struct HtmlReader
 			{
 				foreach (var segment in data)
 				{
+					var logicalRemaining = options.MaxBufferSize - length;
+					if (logicalRemaining <= 0)
+					{
+						return;
+					}
+
 					buffer = GetBuffer(options, buffer, length, length + decoding.Encoding.GetMaxCharCount(segment.Length));
-					length += decoding.Decoder.GetChars(segment.Span, buffer.AsSpan(length), flush: false);
+					var writableLength = Math.Min(logicalRemaining, buffer.Length - length);
+					decoding.Decoder.Convert(segment.Span, buffer.AsSpan(length, writableLength), flush: false, out _, out var charsUsed, out _);
+					length += charsUsed;
 				}
 
 				if (flush)
 				{
+					var logicalRemaining = options.MaxBufferSize - length;
+					if (logicalRemaining <= 0)
+					{
+						return;
+					}
+
 					buffer = GetBuffer(options, buffer, length, length + 4);
-					length += decoding.Decoder.GetChars([], buffer.AsSpan(length), flush: true);
+					var writableLength = Math.Min(logicalRemaining, buffer.Length - length);
+					decoding.Decoder.Convert([], buffer.AsSpan(length, writableLength), flush: true, out _, out var charsUsed, out _);
+					length += charsUsed;
 				}
 			}
 		}
@@ -371,7 +400,9 @@ public ref partial struct HtmlReader
 			return buffer;
 		}
 
-		var minimumLength = Math.Max(buffer is null ? options.InitialBufferSize : buffer.Length * 2, requiredLength);
+		var cappedRequiredLength = Math.Min(requiredLength, options.MaxBufferSize);
+		var maxRequestedLength = Math.Max(buffer is null ? options.InitialBufferSize : buffer.Length * 2, cappedRequiredLength);
+		var minimumLength = Math.Min(maxRequestedLength, options.MaxBufferSize);
 		var newBuffer = options.TextBufferPool.Rent(GetRentLength(minimumLength));
 		if (buffer is not null)
 		{
@@ -379,13 +410,6 @@ public ref partial struct HtmlReader
 			options.TextBufferPool.Return(buffer);
 		}
 		return newBuffer;
-	}
-
-	private static int GetRentLength(int minimumLength)
-	{
-		return minimumLength > 0
-			? (int)BitOperations.RoundUpToPowerOf2((uint)minimumLength)
-			: 1;
 	}
 
 	private readonly record struct DecodingState(Encoding Encoding, Decoder Decoder)
