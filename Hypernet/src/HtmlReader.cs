@@ -12,12 +12,11 @@ public ref partial struct HtmlReader : IDisposable
 	private readonly char[] _buffer;
 	private readonly Span<char> _data;
 	private readonly HtmlReaderOptions _options;
-	private StackItem[] _stackBuffer;
+	private OpenTagStack _stack;
 	private HtmlEntityKind _kind;
 	private int _position;
 	private int _attributeStart;
 	private int _attributeEnd;
-	private int _stackCount;
 	private int _depth;
 	private Span<char> _currentData;
 
@@ -101,12 +100,11 @@ public ref partial struct HtmlReader : IDisposable
 		_data = _buffer.AsSpan(0, input.Length);
 		_options = input.Options;
 
-		_stackBuffer = ArrayPool<StackItem>.Shared.Rent(GetRentLength(Math.Max(input.Options.InitialDepthStackSize, 1)));
+		_stack = new OpenTagStack(input.Options.InitialDepthStackSize);
 		_kind = default;
 		_position = 0;
 		_attributeStart = 0;
 		_attributeEnd = 0;
-		_stackCount = 0;
 		_depth = 0;
 		_currentData = default;
 	}
@@ -118,7 +116,7 @@ public ref partial struct HtmlReader : IDisposable
 	{
 		_options.TextBufferPool.Return(_buffer);
 
-		ArrayPool<StackItem>.Shared.Return(_stackBuffer);
+		_stack.Dispose();
 	}
 
 	/// <summary>
