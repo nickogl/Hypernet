@@ -9,6 +9,26 @@ internal static class HtmlCharset
 		Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 	}
 
+	public static bool TryGetEncoding(ReadOnlySpan<char> charset, out Encoding? encoding)
+	{
+		if (!_codePageByCharsetSpan.TryGetValue(charset, out var codePage))
+		{
+			encoding = null;
+			return false;
+		}
+
+		try
+		{
+			encoding = Encoding.GetEncoding(codePage);
+			return true;
+		}
+		catch (ArgumentException)
+		{
+			encoding = null;
+			return false;
+		}
+	}
+
 	private static readonly Dictionary<string, int> _codePageByCharset = new(StringComparer.OrdinalIgnoreCase)
 	{
 		// UTF-8
@@ -310,24 +330,4 @@ internal static class HtmlCharset
 
 	private static readonly Dictionary<string, int>.AlternateLookup<ReadOnlySpan<char>> _codePageByCharsetSpan
 		= _codePageByCharset.GetAlternateLookup<ReadOnlySpan<char>>();
-
-	public static bool TryGetEncoding(ReadOnlySpan<char> charset, out Encoding? encoding)
-	{
-		if (!_codePageByCharsetSpan.TryGetValue(charset, out var codePage))
-		{
-			encoding = null;
-			return false;
-		}
-
-		try
-		{
-			encoding = Encoding.GetEncoding(codePage);
-			return true;
-		}
-		catch (ArgumentException)
-		{
-			encoding = null;
-			return false;
-		}
-	}
 }
