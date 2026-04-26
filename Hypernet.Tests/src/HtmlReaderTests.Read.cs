@@ -5,7 +5,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_RecoversByEmittingLogicalEndTags()
 	{
-		var reader = HtmlReader.Create("<div><p>Hello</div>", _options);
+		using var content = HtmlContent.Create("<div><p>Hello</div>");
+		var reader = new HtmlReader(content.Span);
 
 		Assert.Equal(HtmlReadResult.Node, reader.Read());
 		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
@@ -38,7 +39,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_MatchesTagsCaseInsensitively()
 	{
-		var reader = HtmlReader.Create("<DIV><P>x</div>", _options);
+		using var content = HtmlContent.Create("<DIV><P>x</div>");
+		var reader = new HtmlReader(content.Span);
 
 		Assert.Equal(HtmlReadResult.Node, reader.Read());
 		Assert.Equal("DIV", reader.TagName.ToString());
@@ -61,7 +63,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_ImplicitlyClosesListItems()
 	{
-		var reader = HtmlReader.Create("<ul><li>One<li>Two</ul>", _options);
+		using var content = HtmlContent.Create("<ul><li>One<li>Two</ul>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "ul", 1);
 		AssertStartTag(ref reader, "li", 2);
@@ -77,7 +80,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_ImplicitlyClosesDefinitionTermsAndDescriptions()
 	{
-		var reader = HtmlReader.Create("<dl><dt>Term<dt>Next</dl>", _options);
+		using var content = HtmlContent.Create("<dl><dt>Term<dt>Next</dl>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "dl", 1);
 		AssertStartTag(ref reader, "dt", 2);
@@ -93,7 +97,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_ImplicitlyClosesDefinitionDescriptions()
 	{
-		var reader = HtmlReader.Create("<dl><dd>First<dd>Second</dl>", _options);
+		using var content = HtmlContent.Create("<dl><dd>First<dd>Second</dl>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "dl", 1);
 		AssertStartTag(ref reader, "dd", 2);
@@ -109,7 +114,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_ImplicitlyClosesHeadings()
 	{
-		var reader = HtmlReader.Create("<div><h1>One<h2>Two</div>", _options);
+		using var content = HtmlContent.Create("<div><h1>One<h2>Two</div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 		AssertStartTag(ref reader, "h1", 2);
@@ -125,7 +131,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_AllowsUnknownTagsToParticipateInNormalNesting()
 	{
-		var reader = HtmlReader.Create("<x-shell><x-item>hello</x-item></x-shell>", _options);
+		using var content = HtmlContent.Create("<x-shell><x-item>hello</x-item></x-shell>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "x-shell", 1);
 		AssertStartTag(ref reader, "x-item", 2);
@@ -138,7 +145,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_TreatsUnterminatedCommentAsCommentToEndOfDocument()
 	{
-		var reader = HtmlReader.Create("<div><!--note", _options);
+		using var content = HtmlContent.Create("<div><!--note");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 		Assert.Equal(HtmlReadResult.Node, reader.Read());
@@ -155,7 +163,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_SkipsBogusMarkupAndContinuesParsing()
 	{
-		var reader = HtmlReader.Create("<div><?bogus?><!decl>ok</div>", _options);
+		using var content = HtmlContent.Create("<div><?bogus?><!decl>ok</div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 		AssertText(ref reader, "ok", 1);
@@ -166,7 +175,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_TreatsInvalidMarkupPrefixAsSingleCharacterText()
 	{
-		var reader = HtmlReader.Create("<1", _options);
+		using var content = HtmlContent.Create("<1");
+		var reader = new HtmlReader(content.Span);
 
 		AssertText(ref reader, "<", 0);
 		AssertText(ref reader, "1", 0);
@@ -176,7 +186,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_TreatsSelfClosingCustomTagAsNonPersistent()
 	{
-		var reader = HtmlReader.Create("<div><widget /></div>", _options);
+		using var content = HtmlContent.Create("<div><widget /></div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 		AssertStartTag(ref reader, "widget", 2);
@@ -187,7 +198,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_TreatsVoidElementsAsNonPersistentAndIgnoresStrayEndTags()
 	{
-		var reader = HtmlReader.Create("<div><input type=text>Hi</span></div>", _options);
+		using var content = HtmlContent.Create("<div><input type=text>Hi</span></div>");
+		var reader = new HtmlReader(content.Span);
 
 		Assert.Equal(HtmlReadResult.Node, reader.Read());
 		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
@@ -217,7 +229,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_SkipsUnmatchedEndTagAndContinuesParsing()
 	{
-		var reader = HtmlReader.Create("<div></span>ok</div>", _options);
+		using var content = HtmlContent.Create("<div></span>ok</div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 		AssertText(ref reader, "ok", 1);
@@ -228,17 +241,10 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_ThrowsWhenMaximumDepthIsExceeded()
 	{
-		var options = new HtmlReaderOptions()
-		{
-			TextBufferPool = _textPool,
-			ByteBufferPool = _bytePool,
-			InitialDepthStackSize = 1,
-			MaxDepth = 2,
-		};
-
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("<a><b><c></c></b></a>", options);
+			using var content = HtmlContent.Create("<a><b><c></c></b></a>");
+			var reader = new HtmlReader(content.Span, new HtmlReaderOptions() { MaxDepth = 2 });
 
 			AssertStartTag(ref reader, "a", 1);
 			AssertStartTag(ref reader, "b", 2);

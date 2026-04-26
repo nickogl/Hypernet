@@ -1,26 +1,13 @@
 namespace Hypernet.Tests;
 
-public sealed partial class HtmlReaderTests : IDisposable
+public sealed partial class HtmlReaderTests
 {
-	private readonly AutoReleasingArrayPool<char> _textPool;
-	private readonly AutoReleasingArrayPool<byte> _bytePool;
-	private readonly HtmlReaderOptions _options;
-
-	public HtmlReaderTests()
+	[Fact]
+	public void Constructor_ThrowsWhenMaxDepthIsNegative()
 	{
-		_textPool = new AutoReleasingArrayPool<char>();
-		_bytePool = new AutoReleasingArrayPool<byte>();
-		_options = new HtmlReaderOptions()
-		{
-			TextBufferPool = _textPool,
-			ByteBufferPool = _bytePool,
-		};
-	}
+		var options = new HtmlReaderOptions() { MaxDepth = -1 };
 
-	public void Dispose()
-	{
-		_bytePool.Dispose();
-		_textPool.Dispose();
+		Assert.Throws<ArgumentOutOfRangeException>(() => new HtmlReader("<div/>".ToCharArray(), options));
 	}
 
 	[Fact]
@@ -28,7 +15,8 @@ public sealed partial class HtmlReaderTests : IDisposable
 	{
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("text", _options);
+			using var content = HtmlContent.Create("text");
+			var reader = new HtmlReader(content.Span);
 
 			Assert.Equal(HtmlReadResult.Node, reader.Read());
 			Assert.Equal(HtmlEntityKind.Text, reader.Kind);
@@ -37,7 +25,8 @@ public sealed partial class HtmlReaderTests : IDisposable
 
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("<!--note-->", _options);
+			using var content = HtmlContent.Create("<!--note-->");
+			var reader = new HtmlReader(content.Span);
 
 			Assert.Equal(HtmlReadResult.Node, reader.Read());
 			Assert.Equal(HtmlEntityKind.Comment, reader.Kind);
@@ -50,7 +39,8 @@ public sealed partial class HtmlReaderTests : IDisposable
 	{
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("<div>", _options);
+			using var content = HtmlContent.Create("<div>");
+			var reader = new HtmlReader(content.Span);
 
 			Assert.Equal(HtmlReadResult.Node, reader.Read());
 			Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
@@ -59,7 +49,8 @@ public sealed partial class HtmlReaderTests : IDisposable
 
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("<!--note-->", _options);
+			using var content = HtmlContent.Create("<!--note-->");
+			var reader = new HtmlReader(content.Span);
 
 			Assert.Equal(HtmlReadResult.Node, reader.Read());
 			Assert.Equal(HtmlEntityKind.Comment, reader.Kind);
@@ -72,7 +63,8 @@ public sealed partial class HtmlReaderTests : IDisposable
 	{
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("<div>", _options);
+			using var content = HtmlContent.Create("<div>");
+			var reader = new HtmlReader(content.Span);
 
 			Assert.Equal(HtmlReadResult.Node, reader.Read());
 			Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
@@ -81,7 +73,8 @@ public sealed partial class HtmlReaderTests : IDisposable
 
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("text", _options);
+			using var content = HtmlContent.Create("text");
+			var reader = new HtmlReader(content.Span);
 
 			Assert.Equal(HtmlReadResult.Node, reader.Read());
 			Assert.Equal(HtmlEntityKind.Text, reader.Kind);

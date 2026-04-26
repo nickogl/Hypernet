@@ -5,7 +5,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_EnumeratesStartTagAttributesTextAndEndTag()
 	{
-		var reader = HtmlReader.Create("<div class=\"hero\" disabled>hi</div>", _options);
+		using var content = HtmlContent.Create("<div class=\"hero\" disabled>hi</div>");
+		var reader = new HtmlReader(content.Span);
 
 		Assert.Equal(HtmlReadResult.Node, reader.Read());
 		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
@@ -20,9 +21,8 @@ public sealed partial class HtmlReaderTests
 		var attributes = new List<string>();
 		foreach (var attribute in reader.Attributes)
 		{
-			attributes.Add($"{attribute.Name.ToString()}={attribute.Value.ToString()}");
+			attributes.Add($"{attribute.Name}={attribute.Value}");
 		}
-
 		Assert.Equal(["class=hero", "disabled="], attributes);
 
 		Assert.Equal(HtmlReadResult.Node, reader.Read());
@@ -41,7 +41,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void TryGetAttribute_MatchesCaseInsensitively_AndReturnsFirstDuplicate()
 	{
-		var reader = HtmlReader.Create("<div CLASS=hero class=shadow></div>", _options);
+		using var content = HtmlContent.Create("<div CLASS=hero class=shadow></div>");
+		var reader = new HtmlReader(content.Span);
 
 		Assert.Equal(HtmlReadResult.Node, reader.Read());
 		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
@@ -52,7 +53,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Attributes_YieldSourceOrder_AndExplicitEmptyValue()
 	{
-		var reader = HtmlReader.Create("<div c='3' a b=\"\" d=text></div>", _options);
+		using var content = HtmlContent.Create("<div c='3' a b=\"\" d=text></div>");
+		var reader = new HtmlReader(content.Span);
 
 		Assert.Equal(HtmlReadResult.Node, reader.Read());
 		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
@@ -71,7 +73,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Attributes_EnumerateEmptySequence_WhenStartTagHasNoAttributes()
 	{
-		var reader = HtmlReader.Create("<div></div>", _options);
+		using var content = HtmlContent.Create("<div></div>");
+		var reader = new HtmlReader(content.Span);
 
 		Assert.Equal(HtmlReadResult.Node, reader.Read());
 		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
@@ -88,7 +91,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void Read_AllowsQuotedAttributeValuesContainingMarkupTerminators()
 	{
-		var reader = HtmlReader.Create("<div data-value=\"1>2\">ok</div>", _options);
+		using var content = HtmlContent.Create("<div data-value=\"1>2\">ok</div>");
+		var reader = new HtmlReader(content.Span);
 
 		Assert.Equal(HtmlReadResult.Node, reader.Read());
 		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
@@ -105,7 +109,8 @@ public sealed partial class HtmlReaderTests
 	{
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("text", _options);
+			using var content = HtmlContent.Create("text");
+			var reader = new HtmlReader(content.Span);
 
 			Assert.Equal(HtmlReadResult.Node, reader.Read());
 			Assert.Equal(HtmlEntityKind.Text, reader.Kind);
@@ -114,7 +119,8 @@ public sealed partial class HtmlReaderTests
 
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("text", _options);
+			using var content = HtmlContent.Create("text");
+			var reader = new HtmlReader(content.Span);
 
 			Assert.Equal(HtmlReadResult.Node, reader.Read());
 			Assert.Equal(HtmlEntityKind.Text, reader.Kind);

@@ -1,4 +1,3 @@
-using System.Buffers;
 using System.Numerics;
 using System.Runtime.CompilerServices;
 
@@ -9,7 +8,8 @@ namespace Hypernet;
 /// </summary>
 public ref partial struct HtmlReader : IDisposable
 {
-	private readonly char[] _buffer;
+	private readonly HtmlReaderOptions _defaultOptions = new();
+
 	private readonly Span<char> _data;
 	private readonly HtmlReaderOptions _options;
 	private OpenTagStack _stack;
@@ -94,19 +94,14 @@ public ref partial struct HtmlReader : IDisposable
 		}
 	}
 
-	internal HtmlReader(Input input)
+	public HtmlReader(Span<char> data, HtmlReaderOptions? options = default)
 	{
-		_buffer = input.Buffer;
-		_data = _buffer.AsSpan(0, input.Length);
-		_options = input.Options;
+		options ??= _defaultOptions;
+		ArgumentOutOfRangeException.ThrowIfNegative(options.MaxDepth, nameof(HtmlReaderOptions.MaxDepth));
 
-		_stack = new OpenTagStack(input.Options.InitialDepthStackSize);
-		_kind = default;
-		_position = 0;
-		_attributeStart = 0;
-		_attributeEnd = 0;
-		_depth = 0;
-		_currentData = default;
+		_data = data;
+		_options = options;
+		_stack = new OpenTagStack(32);
 	}
 
 	/// <summary>
@@ -114,8 +109,6 @@ public ref partial struct HtmlReader : IDisposable
 	/// </summary>
 	public readonly void Dispose()
 	{
-		_options.TextBufferPool.Return(_buffer);
-
 		_stack.Dispose();
 	}
 
@@ -240,17 +233,17 @@ public ref partial struct HtmlReader : IDisposable
 		private int _cursor;
 		private HtmlAttribute _current;
 
+		/// <summary>
+		/// Gets the current attribute.
+		/// </summary>
+		public readonly HtmlAttribute Current => _current;
+
 		internal AttributeEnumerator(ReadOnlySpan<char> data)
 		{
 			_data = data;
 			_cursor = 0;
 			_current = default;
 		}
-
-		/// <summary>
-		/// Gets the current attribute.
-		/// </summary>
-		public readonly HtmlAttribute Current => _current;
 
 		/// <summary>
 		/// Advances to the next attribute.

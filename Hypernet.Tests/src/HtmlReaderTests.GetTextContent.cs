@@ -7,7 +7,8 @@ public sealed partial class HtmlReaderTests
 	{
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("text", _options);
+			using var content = HtmlContent.Create("text");
+			var reader = new HtmlReader(content.Span);
 
 			Assert.Equal(HtmlReadResult.Node, reader.Read());
 			_ = reader.GetTextContent();
@@ -15,7 +16,8 @@ public sealed partial class HtmlReaderTests
 
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("<div>text</div>", _options);
+			using var content = HtmlContent.Create("<div>text</div>");
+			var reader = new HtmlReader(content.Span);
 
 			AssertStartTag(ref reader, "div", 1);
 			AssertText(ref reader, "text", 1);
@@ -24,7 +26,8 @@ public sealed partial class HtmlReaderTests
 
 		Assert.Throws<InvalidOperationException>(() =>
 		{
-			var reader = HtmlReader.Create("<div>text</div>", _options);
+			using var content = HtmlContent.Create("<div>text</div>");
+			var reader = new HtmlReader(content.Span);
 
 			AssertStartTag(ref reader, "div", 1);
 			AssertText(ref reader, "text", 1);
@@ -36,7 +39,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void GetTextContent_ConsumesSubtreeAndLeavesReaderOnMatchingEndTag()
 	{
-		var reader = HtmlReader.Create("<div class=\"card\">Hello <span class=\"emphasis\">world</span>!</div><p>next</p>", _options);
+		using var content = HtmlContent.Create("<div class=\"card\">Hello <span class=\"emphasis\">world</span>!</div><p>next</p>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 
@@ -54,7 +58,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void GetTextContent_DecodesHtmlCharacterReferences()
 	{
-		var reader = HtmlReader.Create("<div>&amp;&nbsp;&#65;&#x42;&NotEqualTilde;</div>", _options);
+		using var content = HtmlContent.Create("<div>&amp;&nbsp;&#65;&#x42;&NotEqualTilde;</div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 
@@ -66,7 +71,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void GetTextContent_PreservesUnknownCharacterReferences()
 	{
-		var reader = HtmlReader.Create("<div>a&bogus; b&#xZZ; c</div>", _options);
+		using var content = HtmlContent.Create("<div>a&bogus; b&#xZZ; c</div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 
@@ -78,7 +84,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void GetTextContent_NormalizesWhitespaceWhenRequested()
 	{
-		var reader = HtmlReader.Create("<div>  A\t&nbsp;<span>\r\nB</span>   C  </div>", _options);
+		using var content = HtmlContent.Create("<div>  A\t&nbsp;<span>\r\nB</span>   C  </div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 
@@ -90,7 +97,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void GetTextContent_ExcludesCommentsByDefault()
 	{
-		var reader = HtmlReader.Create("<div>a<!--&amp;--><span>b</span></div>", _options);
+		using var content = HtmlContent.Create("<div>a<!--&amp;--><span>b</span></div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 
@@ -102,7 +110,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void GetTextContent_IncludesCommentsWhenRequested()
 	{
-		var reader = HtmlReader.Create("<div>a<!--&amp;--><span>b</span></div>", _options);
+		using var content = HtmlContent.Create("<div>a<!--&amp;--><span>b</span></div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 
@@ -114,7 +123,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void GetTextContent_ExcludesNonContentTextByDefault()
 	{
-		var reader = HtmlReader.Create("<div>a<script>x</script><style>y</style><textarea>z</textarea><template>q</template>b</div>", _options);
+		using var content = HtmlContent.Create("<div>a<script>x</script><style>y</style><textarea>z</textarea><template>q</template>b</div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 
@@ -126,7 +136,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void GetTextContent_IncludesNonContentTextWhenRequested()
 	{
-		var reader = HtmlReader.Create("<div>a<script>x&amp;</script><style>y</style><textarea>z</textarea><template>q</template>b</div>", _options);
+		using var content = HtmlContent.Create("<div>a<script>x&amp;</script><style>y</style><textarea>z</textarea><template>q</template>b</div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 
@@ -138,7 +149,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void GetTextContent_CanCombineAllOptions()
 	{
-		var reader = HtmlReader.Create("<div>  A<!-- &amp; --><script>\nB&nbsp;</script>  C&amp;  </div>", _options);
+		using var content = HtmlContent.Create("<div>  A<!-- &amp; --><script>\nB&nbsp;</script>  C&amp;  </div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 
@@ -154,7 +166,8 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public void GetTextContent_ReturnsEmptyForVoidElementAndLeavesLogicalEndTag()
 	{
-		var reader = HtmlReader.Create("<div><input value=test>after</div>", _options);
+		using var content = HtmlContent.Create("<div><input value=test>after</div>");
+		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
 		AssertStartTag(ref reader, "input", 2);

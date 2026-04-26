@@ -4,22 +4,43 @@ using System.Text;
 
 namespace Hypernet.Tests;
 
-public sealed partial class HtmlReaderTests
+public sealed class HtmlContentTests : IDisposable
 {
+	private readonly AutoReleasingArrayPool<char> _textPool;
+	private readonly AutoReleasingArrayPool<byte> _bytePool;
+	private readonly HtmlContentOptions _contentOptions;
+
+	public HtmlContentTests()
+	{
+		_textPool = new AutoReleasingArrayPool<char>();
+		_bytePool = new AutoReleasingArrayPool<byte>();
+		_contentOptions = new HtmlContentOptions()
+		{
+			TextBufferPool = _textPool,
+			ByteBufferPool = _bytePool,
+		};
+	}
+
+	public void Dispose()
+	{
+		_bytePool.Dispose();
+		_textPool.Dispose();
+	}
+
 	[Fact]
 	public void Create_FromSpan_CopiesInputAndReturnsTextBufferOnDispose()
 	{
 		using var textPool = new LeakDetectingArrayPool<char>();
-		var options = new HtmlReaderOptions() { TextBufferPool = textPool };
-		using var reader = HtmlReader.Create("<div>Hello</div>", options);
+		var options = new HtmlContentOptions() { TextBufferPool = textPool };
+		using var content = HtmlContent.Create("<div>Hello</div>", options);
 
-		Assert.Equal("<div>Hello</div>", reader.Data.ToString());
+		Assert.Equal("<div>Hello</div>", content.Span.ToString());
 	}
 
 	[Fact]
 	public void Create_FromSpan_RespectsMaxBufferSize()
 	{
-		var options = new HtmlReaderOptions()
+		var options = new HtmlContentOptions()
 		{
 			TextBufferPool = _textPool,
 			ByteBufferPool = _bytePool,
@@ -27,91 +48,67 @@ public sealed partial class HtmlReaderTests
 			MaxBufferSize = 5,
 		};
 
-		var reader = HtmlReader.Create("<div>Hello</div>", options);
+		var content = HtmlContent.Create("<div>Hello</div>", options);
 
-		Assert.Equal("<div>", reader.Data.ToString());
+		Assert.Equal("<div>", content.Span.ToString());
 	}
 
 	[Fact]
 	public void Create_FromSequence_SingleSegment_SniffsEncodingAndStripsBom()
 	{
-		var reader = HtmlReader.Create(new ReadOnlySequence<byte>([0xEF, 0xBB, 0xBF, (byte)'<', (byte)'p', (byte)'>']), _options);
+		var content = HtmlContent.Create(new ReadOnlySequence<byte>([0xEF, 0xBB, 0xBF, (byte)'<', (byte)'p', (byte)'>']));
 
-		Assert.Equal("<p>", reader.Data.ToString());
+		Assert.Equal("<p>", content.Span.ToString());
 	}
 
 	[Fact]
 	public void Create_FromSequence_MultiSegment_DecodesAcrossSegmentBoundaries()
 	{
-		var options = new HtmlReaderOptions()
+		var options = new HtmlContentOptions()
 		{
 			TextBufferPool = _textPool,
 			ByteBufferPool = _bytePool,
 			Encoding = Encoding.UTF8,
 		};
 
-		var reader = HtmlReader.Create(
+		var content = HtmlContent.Create(
 			CreateSequence(
 				[(byte)'<', (byte)'p', (byte)'>'],
 				[0xC3],
 				[0xA9, (byte)'<', (byte)'/', (byte)'p', (byte)'>']),
 			options);
 
-		Assert.Equal("<p>é</p>", reader.Data.ToString());
+		Assert.Equal("<p>é</p>", content.Span.ToString());
 	}
 
 	[Fact]
 	public void Create_ThrowsWhenInitialBufferSizeExceedsMaxBufferSize()
 	{
-		var options = new HtmlReaderOptions() { InitialBufferSize = 8, MaxBufferSize = 4 };
+		var options = new HtmlContentOptions() { InitialBufferSize = 8, MaxBufferSize = 4 };
 
-		Assert.Throws<ArgumentException>(() => HtmlReader.Create("<div/>", options));
-	}
-
-	[Fact]
-	public void Create_ThrowsWhenInitialDepthStackSizeExceedsMaxDepth()
-	{
-		var options = new HtmlReaderOptions() { InitialDepthStackSize = 3, MaxDepth = 2 };
-
-		Assert.Throws<ArgumentException>(() => HtmlReader.Create("<div/>", options));
+		Assert.Throws<ArgumentException>(() => HtmlContent.Create("<div/>", options));
 	}
 
 	[Fact]
 	public void Create_ThrowsWhenInitialBufferSizeIsNegative()
 	{
-		var options = new HtmlReaderOptions() { InitialBufferSize = -1 };
+		var options = new HtmlContentOptions() { InitialBufferSize = -1 };
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => HtmlReader.Create("<div/>", options));
+		Assert.Throws<ArgumentOutOfRangeException>(() => HtmlContent.Create("<div/>", options));
 	}
 
 	[Fact]
 	public void Create_ThrowsWhenMaxBufferSizeIsNegative()
 	{
-		var options = new HtmlReaderOptions() { MaxBufferSize = -1 };
+		var options = new HtmlContentOptions() { MaxBufferSize = -1 };
 
-		Assert.Throws<ArgumentOutOfRangeException>(() => HtmlReader.Create("<div/>", options));
-	}
-
-	[Fact]
-	public void Create_ThrowsWhenInitialDepthStackSizeIsNegative()
-	{
-		var options = new HtmlReaderOptions() { InitialDepthStackSize = -1 };
-
-		Assert.Throws<ArgumentOutOfRangeException>(() => HtmlReader.Create("<div/>", options));
-	}
-
-	[Fact]
-	public void Create_ThrowsWhenMaxDepthIsNegative()
-	{
-		var options = new HtmlReaderOptions() { MaxDepth = -1 };
-
-		Assert.Throws<ArgumentOutOfRangeException>(() => HtmlReader.Create("<div/>", options));
+		Assert.Throws<ArgumentOutOfRangeException>(() => HtmlContent.Create("<div/>", options));
 	}
 
 	[Fact]
 	public void Create_FromSequence_RespectsMaxBufferSize()
 	{
-		var options = new HtmlReaderOptions()
+		var options = new HtmlContentOptions()
 		{
 			TextBufferPool = _textPool,
 			ByteBufferPool = _bytePool,
@@ -120,24 +117,24 @@ public sealed partial class HtmlReaderTests
 			MaxBufferSize = 5,
 		};
 
-		var reader = HtmlReader.Create(new ReadOnlySequence<byte>(Encoding.UTF8.GetBytes("<div>Hello</div>")), options);
+		var content = HtmlContent.Create(new ReadOnlySequence<byte>(Encoding.UTF8.GetBytes("<div>Hello</div>")), options);
 
-		Assert.Equal("<div>", reader.Data.ToString());
+		Assert.Equal("<div>", content.Span.ToString());
 	}
 
 	[Fact]
 	public async Task CreateAsync_StreamConvenienceOverload_CreatesReaderAndReturnsBuffers()
 	{
 		using var stream = new MemoryStream(Encoding.UTF8.GetBytes("<main>ok</main>"));
-		var reader = await HtmlReader.CreateAsync(stream, _options, CancellationToken.None);
+		var content = await HtmlContent.CreateAsync(stream, CancellationToken.None);
 
-		Assert.Equal("<main>ok</main>", reader.Data.ToString());
+		Assert.Equal("<main>ok</main>", content.Span.ToString());
 	}
 
 	[Fact]
 	public async Task CreateAsync_Stream_RespectsMaxBufferSize()
 	{
-		var options = new HtmlReaderOptions()
+		var options = new HtmlContentOptions()
 		{
 			TextBufferPool = _textPool,
 			ByteBufferPool = _bytePool,
@@ -147,18 +144,18 @@ public sealed partial class HtmlReaderTests
 		};
 
 		using var stream = new MemoryStream(Encoding.UTF8.GetBytes("<div>Hello</div>"));
-		var reader = await HtmlReader.CreateAsync(stream, options, CancellationToken.None);
+		var content = await HtmlContent.CreateAsync(stream, options, CancellationToken.None);
 
-		Assert.Equal("<div>", reader.Data.ToString());
+		Assert.Equal("<div>", content.Span.ToString());
 	}
 
 	[Fact]
 	public async Task CreateAsync_StreamCancellationTokenOverload_CreatesReader()
 	{
 		using var stream = new MemoryStream(Encoding.UTF8.GetBytes("<a/>"));
-		var reader = await HtmlReader.CreateAsync(stream, CancellationToken.None);
+		var content = await HtmlContent.CreateAsync(stream, CancellationToken.None);
 
-		Assert.Equal("<a/>", reader.Data.ToString());
+		Assert.Equal("<a/>", content.Span.ToString());
 	}
 
 	[Fact]
@@ -170,14 +167,14 @@ public sealed partial class HtmlReaderTests
 		using var cancellationTokenSource = new CancellationTokenSource();
 		cancellationTokenSource.Cancel();
 
-		var options = new HtmlReaderOptions()
+		var options = new HtmlContentOptions()
 		{
 			TextBufferPool = textPool,
 			ByteBufferPool = bytePool,
 		};
 
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-			await HtmlReader.CreateAsync(stream, options, cancellationTokenSource.Token));
+			await HtmlContent.CreateAsync(stream, options, cancellationTokenSource.Token));
 	}
 
 	[Fact]
@@ -186,7 +183,7 @@ public sealed partial class HtmlReaderTests
 		using var textPool = new LeakDetectingArrayPool<char>();
 		using var bytePool = new LeakDetectingArrayPool<byte>();
 		using var stream = new ThrowingStream(Encoding.UTF8.GetBytes("<boom>"), throwOnReadNumber: 2);
-		var options = new HtmlReaderOptions()
+		var options = new HtmlContentOptions()
 		{
 			Encoding = Encoding.UTF8,
 			TextBufferPool = textPool,
@@ -194,7 +191,7 @@ public sealed partial class HtmlReaderTests
 		};
 
 		await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-			await HtmlReader.CreateAsync(stream, options, CancellationToken.None));
+			await HtmlContent.CreateAsync(stream, options, CancellationToken.None));
 	}
 
 	[Fact]
@@ -206,9 +203,9 @@ public sealed partial class HtmlReaderTests
 
 		try
 		{
-			var reader = await HtmlReader.CreateAsync(pipe.Reader, _options, CancellationToken.None);
+			var content = await HtmlContent.CreateAsync(pipe.Reader, CancellationToken.None);
 
-			Assert.Equal("<pipe/>", reader.Data.ToString());
+			Assert.Equal("<pipe/>", content.Span.ToString());
 		}
 		finally
 		{
@@ -219,7 +216,7 @@ public sealed partial class HtmlReaderTests
 	[Fact]
 	public async Task CreateAsync_PipeReader_RespectsMaxBufferSize()
 	{
-		var options = new HtmlReaderOptions()
+		var options = new HtmlContentOptions()
 		{
 			TextBufferPool = _textPool,
 			ByteBufferPool = _bytePool,
@@ -234,9 +231,9 @@ public sealed partial class HtmlReaderTests
 
 		try
 		{
-			var reader = await HtmlReader.CreateAsync(pipe.Reader, options, CancellationToken.None);
+			var content = await HtmlContent.CreateAsync(pipe.Reader, options, CancellationToken.None);
 
-			Assert.Equal("<div>", reader.Data.ToString());
+			Assert.Equal("<div>", content.Span.ToString());
 		}
 		finally
 		{
@@ -253,9 +250,9 @@ public sealed partial class HtmlReaderTests
 
 		try
 		{
-			var reader = await HtmlReader.CreateAsync(pipe.Reader, CancellationToken.None);
+			var content = await HtmlContent.CreateAsync(pipe.Reader, CancellationToken.None);
 
-			Assert.Equal("<x/>", reader.Data.ToString());
+			Assert.Equal("<x/>", content.Span.ToString());
 		}
 		finally
 		{
@@ -269,12 +266,11 @@ public sealed partial class HtmlReaderTests
 		using var textPool = new LeakDetectingArrayPool<char>();
 		using var cancellationTokenSource = new CancellationTokenSource();
 		cancellationTokenSource.Cancel();
-
-		var options = new HtmlReaderOptions() { TextBufferPool = textPool };
-		var reader = new CancelingPipeReader();
+		var options = new HtmlContentOptions() { TextBufferPool = textPool };
+		var content = new CancelingPipeReader();
 
 		await Assert.ThrowsAnyAsync<OperationCanceledException>(async () =>
-			await HtmlReader.CreateAsync(reader, options, cancellationTokenSource.Token));
+			await HtmlContent.CreateAsync(content, options, cancellationTokenSource.Token));
 	}
 
 	[Fact]
@@ -284,22 +280,18 @@ public sealed partial class HtmlReaderTests
 		var pipe = new Pipe();
 		pipe.Writer.Write(Encoding.UTF8.GetBytes("<boom/>"));
 		await pipe.Writer.FlushAsync();
-		var reader = new ThrowingPipeReader(pipe.Reader, throwOnReadNumber: 2);
-		var options = new HtmlReaderOptions()
-		{
-			Encoding = Encoding.UTF8,
-			TextBufferPool = textPool,
-		};
+		var content = new ThrowingPipeReader(pipe.Reader, throwOnReadNumber: 2);
+		var options = new HtmlContentOptions() { Encoding = Encoding.UTF8, TextBufferPool = textPool };
 
 		try
 		{
 			await Assert.ThrowsAsync<InvalidOperationException>(async () =>
-				await HtmlReader.CreateAsync(reader, options, CancellationToken.None));
+				await HtmlContent.CreateAsync(content, options, CancellationToken.None));
 		}
 		finally
 		{
 			await pipe.Writer.CompleteAsync();
-			reader.Complete();
+			content.Complete();
 		}
 	}
 

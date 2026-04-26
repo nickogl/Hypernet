@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.ComponentModel;
 using System.IO.Pipelines;
 using System.Numerics;
 using System.Runtime.CompilerServices;
@@ -6,39 +7,51 @@ using System.Text;
 
 namespace Hypernet;
 
-public ref partial struct HtmlReader
+public readonly ref struct HtmlContent : IDisposable
 {
-	private readonly static HtmlReaderOptions _defaultOptions = new() { _validated = true };
+	private readonly static HtmlContentOptions _defaultOptions = new();
+	private readonly Input _input;
+	public readonly Span<char> Span => _input.Buffer.AsSpan(0, _input.Length);
+
+	internal HtmlContent(Input input)
+	{
+		_input = input;
+	}
+
+	public void Dispose()
+	{
+		_input.Options.TextBufferPool.Return(_input.Buffer);
+	}
 
 	/// <summary>
-	/// Creates a buffered reader over immutable text data.
+	/// Creates buffered HTML content over immutable text data.
 	/// </summary>
 	/// <param name="data">The HTML source to read.</param>
-	/// <param name="options">Optional reader configuration.</param>
-	/// <returns>A reader positioned before the first entity.</returns>
-	public static HtmlReader Create(ReadOnlySpan<char> data, HtmlReaderOptions? options = default)
+	/// <param name="options">Optional content configuration.</param>
+	/// <returns>HTML content for use in <see cref="HtmlReader"/>.</returns>
+	public static HtmlContent Create(ReadOnlySpan<char> data, HtmlContentOptions? options = default)
 	{
 		options ??= _defaultOptions;
-		ValidateOptions(options);
+		ThrowIfOptionsInvalid(options);
 
 		var length = Math.Min(data.Length, options.MaxBufferSize);
 		var buffer = GetBuffer(options, null, usedLength: 0, requiredLength: length);
 		data[..length].CopyTo(buffer);
 
 		var input = new Input() { Buffer = buffer, Length = length, Options = options };
-		return new HtmlReader(input);
+		return new HtmlContent(input);
 	}
 
 	/// <summary>
-	/// Creates a buffered reader over immutable binary input.
+	/// Creates buffered HTML content over immutable binary input.
 	/// </summary>
 	/// <param name="data">The HTML source to read.</param>
-	/// <param name="options">Optional reader configuration.</param>
-	/// <returns>A reader positioned before the first entity.</returns>
-	public static HtmlReader Create(ReadOnlySequence<byte> data, HtmlReaderOptions? options = default)
+	/// <param name="options">Optional content configuration.</param>
+	/// <returns>HTML content for use in <see cref="HtmlReader"/>.</returns>
+	public static HtmlContent Create(ReadOnlySequence<byte> data, HtmlContentOptions? options = default)
 	{
 		options ??= _defaultOptions;
-		ValidateOptions(options);
+		ThrowIfOptionsInvalid(options);
 		ArgumentOutOfRangeException.ThrowIfGreaterThan(data.Length, int.MaxValue, nameof(data));
 
 		var encoding = options.Encoding;
@@ -72,35 +85,34 @@ public ref partial struct HtmlReader
 			length += charsUsed;
 		}
 
-		return new HtmlReader(new Input() { Buffer = buffer, Length = length, Options = options });
+		return new HtmlContent(new Input() { Buffer = buffer, Length = length, Options = options });
 	}
 
 	/// <summary>
-	/// Creates a buffered reader by consuming the provided <see cref="Stream" />.
+	/// Creates buffered HTML content by consuming the provided <see cref="Stream" />.
 	/// </summary>
 	/// <param name="stream">The stream containing HTML source.</param>
 	/// <param name="cancellationToken">A cancellation token for the read operation.</param>
-	/// <returns>A reader positioned before the first entity.</returns>
+	/// <returns>HTML content for use in <see cref="HtmlReader"/>.</returns>
 	public static Awaitable CreateAsync(Stream stream, CancellationToken cancellationToken)
 	{
-		return CreateAsync(stream, options: null, cancellationToken);
+		return CreateAsync(stream, _defaultOptions, cancellationToken);
 	}
 
 	/// <summary>
-	/// Creates a buffered reader by consuming the provided <see cref="Stream" />.
+	/// Creates buffered HTML content by consuming the provided <see cref="Stream" />.
 	/// </summary>
 	/// <param name="stream">The stream containing HTML source.</param>
-	/// <param name="options">Optional reader configuration.</param>
+	/// <param name="options">Optional content configuration.</param>
 	/// <param name="cancellationToken">A cancellation token for the read operation.</param>
-	/// <returns>A reader positioned before the first entity.</returns>
-	public static Awaitable CreateAsync(Stream stream, HtmlReaderOptions? options = default, CancellationToken cancellationToken = default)
+	/// <returns>HTML content for use in <see cref="HtmlReader"/>.</returns>
+	public static Awaitable CreateAsync(Stream stream, HtmlContentOptions options, CancellationToken cancellationToken = default)
 	{
-		options ??= _defaultOptions;
-		ValidateOptions(options);
+		ThrowIfOptionsInvalid(options);
 
 		return new Awaitable(CreateAsyncCore(stream, options, cancellationToken));
 
-		static async ValueTask<Input> CreateAsyncCore(Stream stream, HtmlReaderOptions options, CancellationToken cancellationToken)
+		static async ValueTask<Input> CreateAsyncCore(Stream stream, HtmlContentOptions options, CancellationToken cancellationToken)
 		{
 			var sniffer = new HtmlEncodingSniffer();
 			var decodingState = DecodingState.FromEncoding(options.Encoding);
@@ -218,31 +230,30 @@ public ref partial struct HtmlReader
 	}
 
 	/// <summary>
-	/// Creates a buffered reader by consuming the provided <see cref="PipeReader" />.
+	/// Creates buffered HTML content by consuming the provided <see cref="PipeReader" />.
 	/// </summary>
 	/// <param name="reader">The pipe reader containing HTML source.</param>
 	/// <param name="cancellationToken">A cancellation token for the read operation.</param>
-	/// <returns>A reader positioned before the first entity.</returns>
-	public static Awaitable CreateAsync(PipeReader reader, CancellationToken cancellationToken)
+	/// <returns>HTML content for use in <see cref="HtmlReader"/>.</returns>
+	public static Awaitable CreateAsync(PipeReader reader, CancellationToken cancellationToken = default)
 	{
-		return CreateAsync(reader, options: null, cancellationToken);
+		return CreateAsync(reader, _defaultOptions, cancellationToken);
 	}
 
 	/// <summary>
-	/// Creates a buffered reader by consuming the provided <see cref="PipeReader" />.
+	/// Creates buffered HTML content by consuming the provided <see cref="PipeReader" />.
 	/// </summary>
 	/// <param name="reader">The pipe reader containing HTML source.</param>
 	/// <param name="options">Optional reader configuration.</param>
 	/// <param name="cancellationToken">A cancellation token for the read operation.</param>
-	/// <returns>A reader positioned before the first entity.</returns>
-	public static Awaitable CreateAsync(PipeReader reader, HtmlReaderOptions? options = default, CancellationToken cancellationToken = default)
+	/// <returns>HTML content for use in <see cref="HtmlReader"/>.</returns>
+	public static Awaitable CreateAsync(PipeReader reader, HtmlContentOptions options, CancellationToken cancellationToken = default)
 	{
-		options ??= _defaultOptions;
-		ValidateOptions(options);
+		ThrowIfOptionsInvalid(options);
 
 		return new Awaitable(CreateAsyncCore(reader, options, cancellationToken));
 
-		static async ValueTask<Input> CreateAsyncCore(PipeReader reader, HtmlReaderOptions options, CancellationToken cancellationToken)
+		static async ValueTask<Input> CreateAsyncCore(PipeReader reader, HtmlContentOptions options, CancellationToken cancellationToken)
 		{
 			var sniffer = new HtmlEncodingSniffer();
 			var decodingState = DecodingState.FromEncoding(options.Encoding);
@@ -335,43 +346,21 @@ public ref partial struct HtmlReader
 		}
 	}
 
-	private static void ValidateOptions(HtmlReaderOptions options)
+	private static void ThrowIfOptionsInvalid(HtmlContentOptions options)
 	{
-		if (!options._validated)
-		{
-			ThrowIfOptionsInvalid(options);
-		}
-	}
-
-	[MethodImpl(MethodImplOptions.NoInlining)]
-	private static void ThrowIfOptionsInvalid(HtmlReaderOptions options)
-	{
-		ArgumentOutOfRangeException.ThrowIfNegative(options.InitialBufferSize, nameof(HtmlReaderOptions.InitialBufferSize));
-		ArgumentOutOfRangeException.ThrowIfNegative(options.MaxBufferSize, nameof(HtmlReaderOptions.MaxBufferSize));
-		ArgumentOutOfRangeException.ThrowIfNegative(options.InitialDepthStackSize, nameof(HtmlReaderOptions.InitialDepthStackSize));
-		ArgumentOutOfRangeException.ThrowIfNegative(options.MaxDepth, nameof(HtmlReaderOptions.MaxDepth));
+		ArgumentOutOfRangeException.ThrowIfNegative(options.InitialBufferSize, nameof(HtmlContentOptions.InitialBufferSize));
+		ArgumentOutOfRangeException.ThrowIfNegative(options.MaxBufferSize, nameof(HtmlContentOptions.MaxBufferSize));
 		if (options.InitialBufferSize > options.MaxBufferSize)
 		{
 			throw new ArgumentException("Initial buffer size must not exceed the maximum buffer size.", nameof(options));
 		}
-
-		if (options.InitialDepthStackSize > options.MaxDepth)
-		{
-			throw new ArgumentException("Initial depth stack size must not exceed the maximum depth.", nameof(options));
-		}
-
-		options._validated = true;
 	}
 
 	private static ReadOnlySequence<byte> SkipPreamble(ReadOnlySequence<byte> data, Encoding encoding)
 	{
-		ReadOnlySpan<byte> preamble = encoding.Preamble;
-		if (preamble.IsEmpty || !StartsWith(data, preamble))
-		{
-			return data;
-		}
-
-		return data.Slice(preamble.Length);
+		return encoding.Preamble.IsEmpty || !StartsWith(data, encoding.Preamble)
+			? data
+			: data.Slice(encoding.Preamble.Length);
 	}
 
 	private static bool StartsWith(ReadOnlySequence<byte> data, ReadOnlySpan<byte> prefix)
@@ -393,7 +382,7 @@ public ref partial struct HtmlReader
 		return true;
 	}
 
-	private static char[] GetBuffer(HtmlReaderOptions options, char[]? buffer, int usedLength, int requiredLength)
+	private static char[] GetBuffer(HtmlContentOptions options, char[]? buffer, int usedLength, int requiredLength)
 	{
 		if (buffer is not null && requiredLength <= buffer.Length)
 		{
@@ -412,6 +401,13 @@ public ref partial struct HtmlReader
 		return newBuffer;
 	}
 
+	private static int GetRentLength(int minimumLength)
+	{
+		return minimumLength > 0
+			? (int)BitOperations.RoundUpToPowerOf2((uint)minimumLength)
+			: 1;
+	}
+
 	private readonly record struct DecodingState(Encoding Encoding, Decoder Decoder)
 	{
 		public static DecodingState? FromEncoding(Encoding? encoding)
@@ -419,6 +415,56 @@ public ref partial struct HtmlReader
 			return encoding is not null
 				? new DecodingState(encoding, encoding.GetDecoder())
 				: null;
+		}
+	}
+
+	internal readonly struct Input
+	{
+		public char[] Buffer { get; init; }
+		public int Length { get; init; }
+		public HtmlContentOptions Options { get; init; }
+	}
+
+	[EditorBrowsable(EditorBrowsableState.Never)]
+	public readonly struct Awaitable
+	{
+		private readonly ValueTask<Input> _source;
+
+		internal Awaitable(ValueTask<Input> source)
+		{
+			_source = source;
+		}
+
+		public Awaiter GetAwaiter()
+		{
+			return new Awaiter(_source.GetAwaiter());
+		}
+
+		public readonly struct Awaiter : ICriticalNotifyCompletion
+		{
+			private readonly ValueTaskAwaiter<Input> _inner;
+
+			internal Awaiter(ValueTaskAwaiter<Input> inner)
+			{
+				_inner = inner;
+			}
+
+			public bool IsCompleted => _inner.IsCompleted;
+
+			public HtmlContent GetResult()
+			{
+				return new HtmlContent(_inner.GetResult());
+			}
+
+			public void OnCompleted(Action continuation)
+			{
+				_inner.OnCompleted(continuation);
+			}
+
+			public void UnsafeOnCompleted(Action continuation)
+			{
+				_inner.UnsafeOnCompleted(continuation);
+			}
 		}
 	}
 }
