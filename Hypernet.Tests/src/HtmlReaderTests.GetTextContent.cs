@@ -181,4 +181,59 @@ public sealed partial class HtmlReaderTests
 		AssertEndTag(ref reader, "div", 0);
 		Assert.False(reader.Read());
 	}
+
+	[Fact]
+	public void GetTextContent_HandlesMoreSegmentsThanInitialSegmentStorage()
+	{
+		var innerHtml = string.Concat(Enumerable.Range(0, 40).Select(i => $"{i}<span></span>"));
+		var expectedText = string.Concat(Enumerable.Range(0, 40).Select(i => i.ToString()));
+
+		using var content = HtmlContent.Create($"<div>{innerHtml}</div>");
+		var reader = new HtmlReader(content.Span);
+
+		AssertStartTag(ref reader, "div", 1);
+
+		Assert.Equal(expectedText, reader.GetTextContent());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
+		Assert.Equal("div", reader.TagName.ToString());
+		Assert.Equal(0, reader.Depth);
+		Assert.False(reader.Read());
+	}
+
+	[Fact]
+	public void GetTextContent_HandlesRecoveredMissingEndTags()
+	{
+		using var content = HtmlContent.Create("<div><p>Hello</div><span>next</span>");
+		var reader = new HtmlReader(content.Span);
+
+		AssertStartTag(ref reader, "div", 1);
+
+		Assert.Equal("Hello", reader.GetTextContent());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
+		Assert.Equal("div", reader.TagName.ToString());
+		Assert.Equal(0, reader.Depth);
+
+		AssertStartTag(ref reader, "span", 1);
+		AssertText(ref reader, "next", 1);
+		AssertEndTag(ref reader, "span", 0);
+		Assert.False(reader.Read());
+	}
+
+	[Theory]
+	[InlineData("<div>a& b</div>", "a& b")]
+	[InlineData("<div>a&bogus b</div>", "a&bogus b")]
+	[InlineData("<div>a&amp b</div>", "a&amp b")]
+	public void GetTextContent_PreservesDanglingOrUnterminatedCharacterReferences_WhenRequested(
+		string html,
+		string expectedText)
+	{
+		using var content = HtmlContent.Create(html);
+		var reader = new HtmlReader(content.Span);
+
+		AssertStartTag(ref reader, "div", 1);
+
+		Assert.Equal(expectedText, reader.GetTextContent(HtmlTextContentOptions.KeepUnknownEntities));
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
+		Assert.Equal("div", reader.TagName.ToString());
+	}
 }

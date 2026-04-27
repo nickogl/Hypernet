@@ -6,19 +6,31 @@ namespace Hypernet;
 /// <summary>
 /// Provides a flat, forward-only HTML reader over buffered storage.
 /// </summary>
+/// <remarks>
+/// Do not copy this struct under any circumstances. Always pass it by ref.
+/// This is because it contains internal references to its own inline storage.
+/// There are diagnostics in debug mode to flag invalid usage, so make sure to
+/// meticulously test your reader code.
+/// </remarks>
 public ref partial struct HtmlReader : IDisposable
 {
-	private readonly HtmlReaderOptions _defaultOptions = new();
+	private static readonly HtmlReaderOptions _defaultOptions = new();
 
 	private readonly Span<char> _data;
 	private readonly HtmlReaderOptions _options;
-	private OpenTagStack _stack;
+
 	private HtmlToken _token;
 	private int _position;
 	private int _attributeStart;
 	private int _attributeEnd;
 	private int _depth;
 	private Span<char> _currentData;
+
+	private OpenTagStackInlineStorage _openTagStackInlineStorage;
+	private ScratchBuffer<OpenTagStackItem> _openTagStack;
+#if DEBUG
+	private unsafe OpenTagStackItem* _openTagStackInlineStorageAddress;
+#endif
 
 	/// <summary>
 	/// Gets a view over the full HTML text.
@@ -70,7 +82,7 @@ public ref partial struct HtmlReader : IDisposable
 	/// Gets the payload for the current <see cref="HtmlToken.Text" /> token.
 	/// </summary>
 	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.Text" />.</exception>
-	public readonly ReadOnlySpan<char> TextNode
+	public readonly ReadOnlySpan<char> Text
 	{
 		get
 		{
@@ -98,18 +110,20 @@ public ref partial struct HtmlReader : IDisposable
 	{
 		options ??= _defaultOptions;
 		ArgumentOutOfRangeException.ThrowIfNegative(options.MaxDepth, nameof(HtmlReaderOptions.MaxDepth));
+		ArgumentOutOfRangeException.ThrowIfNegative(options.InitialTextContentSegmentSize, nameof(HtmlReaderOptions.InitialTextContentSegmentSize));
+		ArgumentOutOfRangeException.ThrowIfGreaterThan(options.InitialTextContentSegmentSize, HtmlReaderOptions.MaxInitialTextContentSegmentSize);
+		ArgumentOutOfRangeException.ThrowIfNegative(options.MaxTextContentSegmentSize, nameof(HtmlReaderOptions.MaxTextContentSegmentSize));
 
 		_data = data;
 		_options = options;
-		_stack = new OpenTagStack(32);
 	}
 
 	/// <summary>
 	/// Releases parser-owned resources and invalidates all previously returned spans.
 	/// </summary>
-	public readonly void Dispose()
+	public void Dispose()
 	{
-		_stack.Dispose();
+		_openTagStack.Dispose();
 	}
 
 	/// <summary>
@@ -258,5 +272,23 @@ public ref partial struct HtmlReader : IDisposable
 
 			return true;
 		}
+	}
+
+	private readonly struct OpenTagStackItem
+	{
+		public OpenTagStackItem(int nameOffset, int nameLength)
+		{
+			NameOffset = nameOffset;
+			NameLength = nameLength;
+		}
+
+		public int NameOffset { get; }
+		public int NameLength { get; }
+	}
+
+	[InlineArray(64)]
+	private struct OpenTagStackInlineStorage
+	{
+		private OpenTagStackItem _element0;
 	}
 }

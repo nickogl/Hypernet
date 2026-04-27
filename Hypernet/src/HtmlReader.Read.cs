@@ -1,4 +1,5 @@
 using System.Buffers;
+using System.Diagnostics;
 using System.Runtime.CompilerServices;
 
 namespace Hypernet;
@@ -15,18 +16,21 @@ public ref partial struct HtmlReader
 	/// <returns>The outcome of the read operation.</returns>
 	public bool Read()
 	{
+		EnsureOpenTagStack();
+		EnsureOpenTagStackIntegrity();
+
 		ClearCurrentEntity();
 
 		while (true)
 		{
 			if (_position >= _data.Length)
 			{
-				if (_stack.Count == 0)
+				if (_openTagStack.Length == 0)
 				{
 					return false;
 				}
 
-				EmitEndTag(PopOpenTag());
+				EmitEndTag(_openTagStack.Pop());
 				return true;
 			}
 
@@ -80,14 +84,14 @@ public ref partial struct HtmlReader
 		var index = _data.Slice(start).IndexOf('<');
 		var end = index >= 0 ? start + index : _data.Length;
 		_position = end;
-		SetCurrentEntity(HtmlToken.Text, _stack.Count, _data.Slice(start, end - start));
+		SetCurrentEntity(HtmlToken.Text, _openTagStack.Length, _data.Slice(start, end - start));
 	}
 
 	private void ReadSingleCharacterTextNode()
 	{
 		var start = _position;
 		_position++;
-		SetCurrentEntity(HtmlToken.Text, _stack.Count, _data.Slice(start, 1));
+		SetCurrentEntity(HtmlToken.Text, _openTagStack.Length, _data.Slice(start, 1));
 	}
 
 	private bool TryReadComment()
@@ -111,7 +115,7 @@ public ref partial struct HtmlReader
 			if (hyphenIndex < 0)
 			{
 				_position = _data.Length;
-				SetCurrentEntity(HtmlToken.Comment, _stack.Count, _data.Slice(contentStart));
+				SetCurrentEntity(HtmlToken.Comment, _openTagStack.Length, _data.Slice(contentStart));
 				return true;
 			}
 
@@ -120,7 +124,7 @@ public ref partial struct HtmlReader
 			{
 				var value = _data.Slice(contentStart, cursor - contentStart);
 				_position = cursor + 3;
-				SetCurrentEntity(HtmlToken.Comment, _stack.Count, value);
+				SetCurrentEntity(HtmlToken.Comment, _openTagStack.Length, value);
 				return true;
 			}
 
@@ -128,7 +132,7 @@ public ref partial struct HtmlReader
 		}
 
 		_position = _data.Length;
-		SetCurrentEntity(HtmlToken.Comment, _stack.Count, _data.Slice(contentStart));
+		SetCurrentEntity(HtmlToken.Comment, _openTagStack.Length, _data.Slice(contentStart));
 		return true;
 	}
 
@@ -149,9 +153,9 @@ public ref partial struct HtmlReader
 
 		var nameEnd = cursor;
 		var name = _data.Slice(nameStart, nameEnd - nameStart);
-		if (_stack.Count > 0 && ShouldImplicitlyClose(GetOpenTagName(_stack.Count - 1), name))
+		if (_openTagStack.Length > 0 && ShouldImplicitlyClose(GetOpenTagName(_openTagStack.Length - 1), name))
 		{
-			EmitEndTag(PopOpenTag());
+			EmitEndTag(_openTagStack.Pop());
 			return true;
 		}
 
@@ -176,11 +180,11 @@ public ref partial struct HtmlReader
 		_position = tagEnd < _data.Length && _data[tagEnd] == '>' ? tagEnd + 1 : _data.Length;
 		_attributeStart = nameEnd;
 		_attributeEnd = contentEnd;
-		var depth = _stack.Count + 1;
+		var depth = _openTagStack.Length + 1;
 		if (!selfClosing && !IsVoidElement(name))
 		{
-			PushOpenTag(nameStart, nameEnd - nameStart);
-			depth = _stack.Count;
+			_openTagStack.Push(new OpenTagStackItem(nameStart, nameEnd - nameStart), _options.MaxDepth);
+			depth = _openTagStack.Length;
 		}
 
 		SetCurrentEntity(HtmlToken.StartTag, depth, name);
@@ -210,14 +214,14 @@ public ref partial struct HtmlReader
 			return false;
 		}
 
-		if (matchIndex < _stack.Count - 1)
+		if (matchIndex < _openTagStack.Length - 1)
 		{
-			EmitEndTag(PopOpenTag());
+			EmitEndTag(_openTagStack.Pop());
 			return true;
 		}
 
 		_position = FindMarkupNextPosition(cursor);
-		EmitEndTag(PopOpenTag());
+		EmitEndTag(_openTagStack.Pop());
 		return true;
 	}
 
@@ -247,27 +251,12 @@ public ref partial struct HtmlReader
 
 	private void EmitEndTag(OpenTagStackItem item)
 	{
-		SetCurrentEntity(HtmlToken.EndTag, _stack.Count, _data.Slice(item.NameOffset, item.NameLength));
-	}
-
-	private void PushOpenTag(int nameStart, int nameLength)
-	{
-		if (_stack.Count >= _options.MaxDepth)
-		{
-			ThrowMaxDepthExceeded(_options.MaxDepth);
-		}
-
-		_stack.Push(new OpenTagStackItem(nameStart, nameLength));
-	}
-
-	private OpenTagStackItem PopOpenTag()
-	{
-		return _stack.Pop();
+		SetCurrentEntity(HtmlToken.EndTag, _openTagStack.Length, _data.Slice(item.NameOffset, item.NameLength));
 	}
 
 	private readonly int FindOpenTag(ReadOnlySpan<char> name)
 	{
-		for (var i = _stack.Count - 1; i >= 0; i--)
+		for (var i = _openTagStack.Length - 1; i >= 0; i--)
 		{
 			if (NamesEqual(GetOpenTagName(i), name))
 			{
@@ -280,7 +269,7 @@ public ref partial struct HtmlReader
 
 	private readonly ReadOnlySpan<char> GetOpenTagName(int index)
 	{
-		var item = _stack[index];
+		ref var item = ref _openTagStack[index];
 		return _data.Slice(item.NameOffset, item.NameLength);
 	}
 
@@ -494,64 +483,31 @@ public ref partial struct HtmlReader
 		return value is ' ' or '\t' or '\r' or '\n' or '\f';
 	}
 
-	private struct OpenTagStack
+	private unsafe void EnsureOpenTagStack()
 	{
-		private OpenTagStackItem[] _buffer;
-		private int _count;
-
-		public OpenTagStack(int initialSize)
+		if (_openTagStack._inline.IsEmpty)
 		{
-			initialSize = GetRentLength(Math.Max(initialSize, 1));
-			_buffer = ArrayPool<OpenTagStackItem>.Shared.Rent(initialSize);
-			_count = 0;
-		}
-
-		public readonly int Count => _count;
-
-		public readonly OpenTagStackItem this[int index] => _buffer[index];
-
-		public void Push(OpenTagStackItem item)
-		{
-			if (_count == _buffer.Length)
+			Span<OpenTagStackItem> openTagSpan = _openTagStackInlineStorage;
+			fixed (OpenTagStackItem* openTagPtr = &_openTagStackInlineStorage[0])
 			{
-				var newSize = GetRentLength(_buffer.Length * 2);
-				var newBuffer = ArrayPool<OpenTagStackItem>.Shared.Rent(newSize);
-				Array.Copy(_buffer, newBuffer, _count);
-				ArrayPool<OpenTagStackItem>.Shared.Return(_buffer);
-				_buffer = newBuffer;
+#if DEBUG
+				_openTagStackInlineStorageAddress = openTagPtr;
+#endif
+				_openTagStack = new(openTagPtr, openTagSpan.Length);
 			}
-
-			_buffer[_count] = item;
-			_count++;
-		}
-
-		public OpenTagStackItem Pop()
-		{
-			_count--;
-			return _buffer[_count];
-		}
-
-		public readonly void Dispose()
-		{
-			ArrayPool<OpenTagStackItem>.Shared.Return(_buffer);
 		}
 	}
 
-	private readonly struct OpenTagStackItem
+	[Conditional("DEBUG")]
+	private readonly unsafe void EnsureOpenTagStackIntegrity()
 	{
-		public OpenTagStackItem(int nameOffset, int nameLength)
+#if DEBUG
+		fixed (OpenTagStackItem* ptr = &_openTagStackInlineStorage[0])
 		{
-			NameOffset = nameOffset;
-			NameLength = nameLength;
+			Debug.Assert(
+				ptr == _openTagStackInlineStorageAddress,
+				"HtmlReader was copied after construction. It contains internal references to its own inline storage and must be passed by reference.");
 		}
-
-		public int NameOffset { get; }
-		public int NameLength { get; }
-	}
-
-	[MethodImpl(MethodImplOptions.NoInlining)]
-	private static void ThrowMaxDepthExceeded(int maxDepth)
-	{
-		throw new InvalidOperationException($"Maximum depth '{maxDepth}' exceeded.");
+#endif
 	}
 }

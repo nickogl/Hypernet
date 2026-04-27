@@ -20,7 +20,7 @@ public sealed partial class HtmlReaderTests
 
 		Assert.True(reader.Read());
 		Assert.Equal(HtmlToken.Text, reader.Token);
-		Assert.Equal("Hello", reader.TextNode.ToString());
+		Assert.Equal("Hello", reader.Text.ToString());
 		Assert.Equal(2, reader.Depth);
 
 		Assert.True(reader.Read());
@@ -49,7 +49,7 @@ public sealed partial class HtmlReaderTests
 		Assert.Equal("P", reader.TagName.ToString());
 
 		Assert.True(reader.Read());
-		Assert.Equal("x", reader.TextNode.ToString());
+		Assert.Equal("x", reader.Text.ToString());
 
 		Assert.True(reader.Read());
 		Assert.Equal(HtmlToken.EndTag, reader.Token);
@@ -215,7 +215,7 @@ public sealed partial class HtmlReaderTests
 
 		Assert.True(reader.Read());
 		Assert.Equal(HtmlToken.Text, reader.Token);
-		Assert.Equal("Hi", reader.TextNode.ToString());
+		Assert.Equal("Hi", reader.Text.ToString());
 		Assert.Equal(1, reader.Depth);
 
 		Assert.True(reader.Read());
@@ -252,6 +252,48 @@ public sealed partial class HtmlReaderTests
 		});
 	}
 
+	[Fact]
+	public void Read_HandlesDepthBeyondInitialOpenTagStackStorage()
+	{
+		var startTags = string.Concat(Enumerable.Range(0, 70).Select(i => $"<x{i}>"));
+		var endTags = string.Concat(Enumerable.Range(0, 70).Reverse().Select(i => $"</x{i}>"));
+
+		using var content = HtmlContent.Create($"{startTags}text{endTags}");
+		var reader = new HtmlReader(content.Span, new HtmlReaderOptions()
+		{
+			InitialTextContentSegmentSize = 4,
+			MaxDepth = 128
+		});
+
+		for (var i = 0; i < 70; i++)
+		{
+			AssertStartTag(ref reader, $"x{i}", i + 1);
+		}
+
+		AssertText(ref reader, "text", 70);
+
+		for (var i = 69; i >= 0; i--)
+		{
+			AssertEndTag(ref reader, $"x{i}", i);
+		}
+
+		Assert.False(reader.Read());
+	}
+
+	[Fact]
+	public void Read_EmitsLogicalEndTagsAtEndOfDocument()
+	{
+		using var content = HtmlContent.Create("<div><span>x");
+		var reader = new HtmlReader(content.Span);
+
+		AssertStartTag(ref reader, "div", 1);
+		AssertStartTag(ref reader, "span", 2);
+		AssertText(ref reader, "x", 2);
+		AssertEndTag(ref reader, "span", 1);
+		AssertEndTag(ref reader, "div", 0);
+		Assert.False(reader.Read());
+	}
+
 	private static void AssertStartTag(ref HtmlReader reader, string expectedName, int expectedDepth)
 	{
 		Assert.True(reader.Read());
@@ -272,7 +314,7 @@ public sealed partial class HtmlReaderTests
 	{
 		Assert.True(reader.Read());
 		Assert.Equal(HtmlToken.Text, reader.Token);
-		Assert.Equal(expectedText, reader.TextNode.ToString());
+		Assert.Equal(expectedText, reader.Text.ToString());
 		Assert.Equal(expectedDepth, reader.Depth);
 	}
 }

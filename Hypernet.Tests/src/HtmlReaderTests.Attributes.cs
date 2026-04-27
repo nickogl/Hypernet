@@ -27,7 +27,7 @@ public sealed partial class HtmlReaderTests
 
 		Assert.True(reader.Read());
 		Assert.Equal(HtmlToken.Text, reader.Token);
-		Assert.Equal("hi", reader.TextNode.ToString());
+		Assert.Equal("hi", reader.Text.ToString());
 		Assert.Equal(1, reader.Depth);
 
 		Assert.True(reader.Read());
@@ -101,7 +101,7 @@ public sealed partial class HtmlReaderTests
 
 		Assert.True(reader.Read());
 		Assert.Equal(HtmlToken.Text, reader.Token);
-		Assert.Equal("ok", reader.TextNode.ToString());
+		Assert.Equal("ok", reader.Text.ToString());
 	}
 
 	[Fact]

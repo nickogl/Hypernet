@@ -11,6 +11,14 @@ public sealed partial class HtmlReaderTests
 	}
 
 	[Fact]
+	public void Constructor_ThrowsWhenInitialTextContentSegmentSizeIsNegative()
+	{
+		var options = new HtmlReaderOptions() { InitialTextContentSegmentSize = -1 };
+
+		Assert.Throws<ArgumentOutOfRangeException>(() => new HtmlReader("<div/>".ToCharArray(), options));
+	}
+
+	[Fact]
 	public void TagName_Throws_WhenCurrentEntityKindIsUnexpected()
 	{
 		Assert.Throws<InvalidOperationException>(() =>
@@ -44,7 +52,7 @@ public sealed partial class HtmlReaderTests
 
 			Assert.True(reader.Read());
 			Assert.Equal(HtmlToken.StartTag, reader.Token);
-			_ = reader.TextNode;
+			_ = reader.Text;
 		});
 
 		Assert.Throws<InvalidOperationException>(() =>
@@ -54,7 +62,7 @@ public sealed partial class HtmlReaderTests
 
 			Assert.True(reader.Read());
 			Assert.Equal(HtmlToken.Comment, reader.Token);
-			_ = reader.TextNode;
+			_ = reader.Text;
 		});
 	}
 

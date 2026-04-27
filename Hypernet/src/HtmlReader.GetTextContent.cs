@@ -30,70 +30,59 @@ public ref partial struct HtmlReader
 		var ignoredDepth = !includeNonContentText && IsNonContentTag(_currentData)
 			? targetDepth
 			: -1;
-		var segments = ArrayPool<TextSegment>.Shared.Rent(8);
-		var segmentCount = 0;
 
-		try
+		Span<TextSegment> inlineSegmentStorage = stackalloc TextSegment[_options.InitialTextContentSegmentSize];
+		using var segments = new ScratchBuffer<TextSegment>(inlineSegmentStorage);
+		while (Read())
 		{
-			while (Read())
+			if (ignoredDepth < 0 && _token == HtmlToken.StartTag && !includeNonContentText && IsNonContentTag(_currentData))
 			{
-				if (ignoredDepth < 0 && _token == HtmlToken.StartTag && !includeNonContentText && IsNonContentTag(_currentData))
+				ignoredDepth = _depth - 1;
+			}
+			else if (ignoredDepth < 0)
+			{
+				if (_token == HtmlToken.Text || _token == HtmlToken.Comment && includeComments)
 				{
-					ignoredDepth = _depth - 1;
-				}
-				else if (ignoredDepth < 0)
-				{
-					if (_token == HtmlToken.Text || _token == HtmlToken.Comment && includeComments)
+					var written = RewriteContentInPlace(_currentData, keepUnknownEntities);
+					if (written > 0 && _data.Overlaps(_currentData, out var offset))
 					{
-						var written = RewriteContentInPlace(_currentData, keepUnknownEntities);
-						if (written > 0)
-						{
-							if (_data.Overlaps(_currentData, out var offset))
-							{
-								AddSegment(ref segments, ref segmentCount, new TextSegment(offset, written));
-							}
-						}
+						segments.Push(new TextSegment(offset, written), _options.MaxTextContentSegmentSize);
 					}
 				}
-
-				if (_token == HtmlToken.EndTag && _depth == ignoredDepth)
-				{
-					ignoredDepth = -1;
-				}
-
-				if (_token == HtmlToken.EndTag && _depth == targetDepth)
-				{
-					break;
-				}
 			}
 
-			var destinationCursor = destinationStart;
-			for (var i = 0; i < segmentCount; i++)
+			if (_token == HtmlToken.EndTag && _depth == ignoredDepth)
 			{
-				var segment = segments[i];
-				_data.Slice(segment.Start, segment.Length).CopyTo(_data[destinationCursor..]);
-				destinationCursor += segment.Length;
+				ignoredDepth = -1;
 			}
 
-			var result = _data.Slice(destinationStart, destinationCursor - destinationStart);
-			if (normalizeWhitespace)
+			if (_token == HtmlToken.EndTag && _depth == targetDepth)
 			{
-				return result[..NormalizeWhitespaceInPlace(result)];
+				break;
 			}
-
-			return result;
 		}
-		finally
+
+		var destinationCursor = destinationStart;
+		foreach (var segment in segments)
 		{
-			ArrayPool<TextSegment>.Shared.Return(segments);
+			_data.Slice(segment.Start, segment.Length).CopyTo(_data[destinationCursor..]);
+			destinationCursor += segment.Length;
 		}
+
+		var result = _data.Slice(destinationStart, destinationCursor - destinationStart);
+		if (normalizeWhitespace)
+		{
+			return result[..NormalizeWhitespaceInPlace(result)];
+		}
+
+		return result;
 	}
 
 	private readonly bool IsPersistentStartTag()
 	{
-		return _stack.Count > 0
-			&& _depth == _stack.Count
-			&& GetOpenTagName(_stack.Count - 1).Equals(_currentData, StringComparison.OrdinalIgnoreCase);
+		return _openTagStack.Length > 0
+			&& _depth == _openTagStack.Length
+			&& GetOpenTagName(_openTagStack.Length - 1).Equals(_currentData, StringComparison.OrdinalIgnoreCase);
 	}
 
 	private static bool IsContentWhitespace(char value)
@@ -205,29 +194,7 @@ public ref partial struct HtmlReader
 		};
 	}
 
-	private static void AddSegment(ref TextSegment[] segments, ref int count, TextSegment segment)
+	private readonly record struct TextSegment(int Start, int Length)
 	{
-		if (count == segments.Length)
-		{
-			var newSegments = ArrayPool<TextSegment>.Shared.Rent(segments.Length * 2);
-			Array.Copy(segments, newSegments, count);
-			ArrayPool<TextSegment>.Shared.Return(segments);
-			segments = newSegments;
-		}
-
-		segments[count] = segment;
-		count++;
-	}
-
-	private readonly struct TextSegment
-	{
-		public TextSegment(int start, int length)
-		{
-			Start = start;
-			Length = length;
-		}
-
-		public int Start { get; }
-		public int Length { get; }
 	}
 }
