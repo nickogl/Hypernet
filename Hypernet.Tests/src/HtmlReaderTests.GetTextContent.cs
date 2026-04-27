@@ -10,7 +10,7 @@ public sealed partial class HtmlReaderTests
 			using var content = HtmlContent.Create("text");
 			var reader = new HtmlReader(content.Span);
 
-			Assert.Equal(HtmlReadResult.Node, reader.Read());
+			Assert.True(reader.Read());
 			_ = reader.GetTextContent();
 		});
 
@@ -45,14 +45,14 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "div", 1);
 
 		Assert.Equal("Hello world!", reader.GetTextContent());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName);
 		Assert.Equal(0, reader.Depth);
 
 		AssertStartTag(ref reader, "p", 1);
 		AssertText(ref reader, "next", 1);
 		AssertEndTag(ref reader, "p", 0);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -64,7 +64,7 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "div", 1);
 
 		Assert.Equal("&\u00A0AB\u2242\u0338", reader.GetTextContent());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName);
 	}
 
@@ -77,7 +77,7 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "div", 1);
 
 		Assert.Equal("a&bogus; b&#xZZ; c", reader.GetTextContent(HtmlTextContentOptions.KeepUnknownEntities));
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName);
 	}
 
@@ -90,7 +90,7 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "div", 1);
 
 		Assert.Equal("A B C", reader.GetTextContent(HtmlTextContentOptions.NormalizeWhitespace));
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName);
 	}
 
@@ -103,7 +103,7 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "div", 1);
 
 		Assert.Equal("ab", reader.GetTextContent());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName);
 	}
 
@@ -116,7 +116,7 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "div", 1);
 
 		Assert.Equal("a&b", reader.GetTextContent(HtmlTextContentOptions.IncludeComments));
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName);
 	}
 
@@ -129,7 +129,7 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "div", 1);
 
 		Assert.Equal("ab", reader.GetTextContent());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName);
 	}
 
@@ -142,7 +142,7 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "div", 1);
 
 		Assert.Equal("ax&yzqb", reader.GetTextContent(HtmlTextContentOptions.IncludeNonContentText));
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName);
 	}
 
@@ -159,7 +159,7 @@ public sealed partial class HtmlReaderTests
 			| HtmlTextContentOptions.IncludeComments
 			| HtmlTextContentOptions.IncludeNonContentText
 			| HtmlTextContentOptions.KeepUnknownEntities));
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName);
 	}
 
@@ -173,12 +173,12 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "input", 2);
 
 		Assert.Equal(string.Empty, reader.GetTextContent());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("input", reader.TagName);
 		Assert.Equal(1, reader.Depth);
 
 		AssertText(ref reader, "after", 1);
 		AssertEndTag(ref reader, "div", 0);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 }

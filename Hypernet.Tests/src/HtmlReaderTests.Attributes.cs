@@ -8,8 +8,8 @@ public sealed partial class HtmlReaderTests
 		using var content = HtmlContent.Create("<div class=\"hero\" disabled>hi</div>");
 		var reader = new HtmlReader(content.Span);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
 		Assert.Equal("div", reader.TagName.ToString());
 		Assert.Equal(1, reader.Depth);
 		Assert.True(reader.TryGetAttribute("class", out var classValue));
@@ -25,17 +25,17 @@ public sealed partial class HtmlReaderTests
 		}
 		Assert.Equal(["class=hero", "disabled="], attributes);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.Text, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
 		Assert.Equal("hi", reader.TextNode.ToString());
 		Assert.Equal(1, reader.Depth);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName.ToString());
 		Assert.Equal(0, reader.Depth);
 
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -44,8 +44,8 @@ public sealed partial class HtmlReaderTests
 		using var content = HtmlContent.Create("<div CLASS=hero class=shadow></div>");
 		var reader = new HtmlReader(content.Span);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
 		Assert.True(reader.TryGetAttribute("class", out var value));
 		Assert.Equal("hero", value.ToString());
 	}
@@ -56,8 +56,8 @@ public sealed partial class HtmlReaderTests
 		using var content = HtmlContent.Create("<div c='3' a b=\"\" d=text></div>");
 		var reader = new HtmlReader(content.Span);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
 
 		var attributes = new List<string>();
 		foreach (var attribute in reader.Attributes)
@@ -76,8 +76,8 @@ public sealed partial class HtmlReaderTests
 		using var content = HtmlContent.Create("<div></div>");
 		var reader = new HtmlReader(content.Span);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
 
 		var attributes = new List<string>();
 		foreach (var attribute in reader.Attributes)
@@ -94,13 +94,13 @@ public sealed partial class HtmlReaderTests
 		using var content = HtmlContent.Create("<div data-value=\"1>2\">ok</div>");
 		var reader = new HtmlReader(content.Span);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
 		Assert.True(reader.TryGetAttribute("data-value", out var value));
 		Assert.Equal("1>2", value.ToString());
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.Text, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
 		Assert.Equal("ok", reader.TextNode.ToString());
 	}
 
@@ -112,8 +112,8 @@ public sealed partial class HtmlReaderTests
 			using var content = HtmlContent.Create("text");
 			var reader = new HtmlReader(content.Span);
 
-			Assert.Equal(HtmlReadResult.Node, reader.Read());
-			Assert.Equal(HtmlEntityKind.Text, reader.Kind);
+			Assert.True(reader.Read());
+			Assert.Equal(HtmlToken.Text, reader.Token);
 			reader.TryGetAttribute("class", out _);
 		});
 
@@ -122,8 +122,8 @@ public sealed partial class HtmlReaderTests
 			using var content = HtmlContent.Create("text");
 			var reader = new HtmlReader(content.Span);
 
-			Assert.Equal(HtmlReadResult.Node, reader.Read());
-			Assert.Equal(HtmlEntityKind.Text, reader.Kind);
+			Assert.True(reader.Read());
+			Assert.Equal(HtmlToken.Text, reader.Token);
 			foreach (var attribute in reader.Attributes)
 			{
 				_ = attribute;

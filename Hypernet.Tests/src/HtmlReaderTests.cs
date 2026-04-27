@@ -18,8 +18,8 @@ public sealed partial class HtmlReaderTests
 			using var content = HtmlContent.Create("text");
 			var reader = new HtmlReader(content.Span);
 
-			Assert.Equal(HtmlReadResult.Node, reader.Read());
-			Assert.Equal(HtmlEntityKind.Text, reader.Kind);
+			Assert.True(reader.Read());
+			Assert.Equal(HtmlToken.Text, reader.Token);
 			_ = reader.TagName;
 		});
 
@@ -28,8 +28,8 @@ public sealed partial class HtmlReaderTests
 			using var content = HtmlContent.Create("<!--note-->");
 			var reader = new HtmlReader(content.Span);
 
-			Assert.Equal(HtmlReadResult.Node, reader.Read());
-			Assert.Equal(HtmlEntityKind.Comment, reader.Kind);
+			Assert.True(reader.Read());
+			Assert.Equal(HtmlToken.Comment, reader.Token);
 			_ = reader.TagName;
 		});
 	}
@@ -42,8 +42,8 @@ public sealed partial class HtmlReaderTests
 			using var content = HtmlContent.Create("<div>");
 			var reader = new HtmlReader(content.Span);
 
-			Assert.Equal(HtmlReadResult.Node, reader.Read());
-			Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+			Assert.True(reader.Read());
+			Assert.Equal(HtmlToken.StartTag, reader.Token);
 			_ = reader.TextNode;
 		});
 
@@ -52,8 +52,8 @@ public sealed partial class HtmlReaderTests
 			using var content = HtmlContent.Create("<!--note-->");
 			var reader = new HtmlReader(content.Span);
 
-			Assert.Equal(HtmlReadResult.Node, reader.Read());
-			Assert.Equal(HtmlEntityKind.Comment, reader.Kind);
+			Assert.True(reader.Read());
+			Assert.Equal(HtmlToken.Comment, reader.Token);
 			_ = reader.TextNode;
 		});
 	}
@@ -66,8 +66,8 @@ public sealed partial class HtmlReaderTests
 			using var content = HtmlContent.Create("<div>");
 			var reader = new HtmlReader(content.Span);
 
-			Assert.Equal(HtmlReadResult.Node, reader.Read());
-			Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+			Assert.True(reader.Read());
+			Assert.Equal(HtmlToken.StartTag, reader.Token);
 			_ = reader.Comment;
 		});
 
@@ -76,8 +76,8 @@ public sealed partial class HtmlReaderTests
 			using var content = HtmlContent.Create("text");
 			var reader = new HtmlReader(content.Span);
 
-			Assert.Equal(HtmlReadResult.Node, reader.Read());
-			Assert.Equal(HtmlEntityKind.Text, reader.Kind);
+			Assert.True(reader.Read());
+			Assert.Equal(HtmlToken.Text, reader.Token);
 			_ = reader.Comment;
 		});
 	}

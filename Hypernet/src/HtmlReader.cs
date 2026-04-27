@@ -13,7 +13,7 @@ public ref partial struct HtmlReader : IDisposable
 	private readonly Span<char> _data;
 	private readonly HtmlReaderOptions _options;
 	private OpenTagStack _stack;
-	private HtmlEntityKind _kind;
+	private HtmlToken _token;
 	private int _position;
 	private int _attributeStart;
 	private int _attributeEnd;
@@ -26,24 +26,24 @@ public ref partial struct HtmlReader : IDisposable
 	public readonly ReadOnlySpan<char> Data => _data;
 
 	/// <summary>
-	/// Gets the kind of the current entity. This is the discriminator for the current reader state.
+	/// Gets the kind of the current token. This is the discriminator for the current reader state.
 	/// </summary>
-	public readonly HtmlEntityKind Kind => _kind;
+	public readonly HtmlToken Token => _token;
 
 	/// <summary>
-	/// Gets the logical depth after the current entity has been produced and recovery has been applied.
+	/// Gets the logical depth after the current token has been produced and recovery has been applied.
 	/// </summary>
 	public readonly int Depth => _depth;
 
 	/// <summary>
-	/// Gets the tag name for the current <see cref="HtmlEntityKind.StartTag" /> or <see cref="HtmlEntityKind.EndTag" /> entity.
+	/// Gets the tag name for the current <see cref="HtmlToken.StartTag" /> or <see cref="HtmlToken.EndTag" /> token.
 	/// </summary>
-	/// <exception cref="InvalidOperationException">Thrown when the current entity kind is neither <see cref="HtmlEntityKind.StartTag" /> nor <see cref="HtmlEntityKind.EndTag" />.</exception>
+	/// <exception cref="InvalidOperationException">Thrown when the current token is neither <see cref="HtmlToken.StartTag" /> nor <see cref="HtmlToken.EndTag" />.</exception>
 	public readonly ReadOnlySpan<char> TagName
 	{
 		get
 		{
-			if (Kind != HtmlEntityKind.StartTag && Kind != HtmlEntityKind.EndTag)
+			if (Token != HtmlToken.StartTag && Token != HtmlToken.EndTag)
 			{
 				ThrowUnexpectedTagNameAccess();
 			}
@@ -55,40 +55,40 @@ public ref partial struct HtmlReader : IDisposable
 	/// <summary>
 	/// Gets a zero-allocation enumerable view over the current start tag's attributes.
 	/// </summary>
-	/// <exception cref="InvalidOperationException">Thrown when the current entity kind is not <see cref="HtmlEntityKind.StartTag" />.</exception>
+	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.StartTag" />.</exception>
 	public readonly AttributeEnumerable Attributes
 	{
 		get
 		{
-			ThrowIfUnexpectedEntity(HtmlEntityKind.StartTag);
+			ThrowIfUnexpectedEntity(HtmlToken.StartTag);
 
 			return new AttributeEnumerable(_data[_attributeStart.._attributeEnd]);
 		}
 	}
 
 	/// <summary>
-	/// Gets the payload for the current <see cref="HtmlEntityKind.Text" /> entity.
+	/// Gets the payload for the current <see cref="HtmlToken.Text" /> token.
 	/// </summary>
-	/// <exception cref="InvalidOperationException">Thrown when the current entity kind is not <see cref="HtmlEntityKind.Text" />.</exception>
+	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.Text" />.</exception>
 	public readonly ReadOnlySpan<char> TextNode
 	{
 		get
 		{
-			ThrowIfUnexpectedEntity(HtmlEntityKind.Text);
+			ThrowIfUnexpectedEntity(HtmlToken.Text);
 
 			return _currentData;
 		}
 	}
 
 	/// <summary>
-	/// Gets the payload for the current <see cref="HtmlEntityKind.Comment" /> entity.
+	/// Gets the payload for the current <see cref="HtmlToken.Comment" /> token.
 	/// </summary>
-	/// <exception cref="InvalidOperationException">Thrown when the current entity kind is not <see cref="HtmlEntityKind.Comment" />.</exception>
+	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.Comment" />.</exception>
 	public readonly ReadOnlySpan<char> Comment
 	{
 		get
 		{
-			ThrowIfUnexpectedEntity(HtmlEntityKind.Comment);
+			ThrowIfUnexpectedEntity(HtmlToken.Comment);
 
 			return _currentData;
 		}
@@ -118,10 +118,10 @@ public ref partial struct HtmlReader : IDisposable
 	/// <param name="name">The attribute name to search for.</param>
 	/// <param name="value">Receives the attribute value when found.</param>
 	/// <returns><see langword="true" /> when a matching attribute is found; otherwise, <see langword="false" />.</returns>
-	/// <exception cref="InvalidOperationException">Thrown when the current entity kind is not <see cref="HtmlEntityKind.StartTag" />.</exception>
+	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.StartTag" />.</exception>
 	public readonly bool TryGetAttribute(ReadOnlySpan<char> name, out ReadOnlySpan<char> value)
 	{
-		ThrowIfUnexpectedEntity(HtmlEntityKind.StartTag);
+		ThrowIfUnexpectedEntity(HtmlToken.StartTag);
 
 		foreach (var attribute in Attributes)
 		{
@@ -137,47 +137,47 @@ public ref partial struct HtmlReader : IDisposable
 	}
 
 	/// <summary>
-	/// Exposes mutable access to the current text node when the current entity is text.
+	/// Exposes mutable access to the current text node when the current token is text.
 	/// </summary>
 	/// <returns>A mutable span over the current text node.</returns>
-	/// <exception cref="InvalidOperationException">Thrown when the current entity kind is not <see cref="HtmlEntityKind.Text" />.</exception>
+	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.Text" />.</exception>
 	public readonly Span<char> GetDangerousMutableTextNode()
 	{
-		ThrowIfUnexpectedEntity(HtmlEntityKind.Text);
+		ThrowIfUnexpectedEntity(HtmlToken.Text);
 
 		return _currentData;
 	}
 
 	/// <summary>
-	/// Exposes mutable access to the current comment when the current entity is a comment.
+	/// Exposes mutable access to the current comment when the current token is a comment.
 	/// </summary>
 	/// <returns>A mutable span over the current comment.</returns>
-	/// <exception cref="InvalidOperationException">Thrown when the current entity kind is not <see cref="HtmlEntityKind.Comment" />.</exception>
+	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.Comment" />.</exception>
 	public readonly Span<char> GetDangerousMutableComment()
 	{
-		ThrowIfUnexpectedEntity(HtmlEntityKind.Comment);
+		ThrowIfUnexpectedEntity(HtmlToken.Comment);
 
 		return _currentData;
 	}
 
-	private readonly void ThrowIfUnexpectedEntity(HtmlEntityKind expected)
+	private readonly void ThrowIfUnexpectedEntity(HtmlToken expected)
 	{
-		if (Kind != expected)
+		if (Token != expected)
 		{
 			ThrowUnexpectedEntity(expected);
 		}
 	}
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
-	private readonly void ThrowUnexpectedEntity(HtmlEntityKind expected)
+	private readonly void ThrowUnexpectedEntity(HtmlToken expected)
 	{
-		throw new InvalidOperationException($"Expected entity '{expected}' but current entity is '{Kind}'");
+		throw new InvalidOperationException($"Expected token '{expected}' but current token is '{Token}'");
 	}
 
 	[MethodImpl(MethodImplOptions.NoInlining)]
 	private readonly void ThrowUnexpectedTagNameAccess()
 	{
-		throw new InvalidOperationException($"Expected entity '{HtmlEntityKind.StartTag}' or '{HtmlEntityKind.EndTag}' but current entity is '{Kind}'");
+		throw new InvalidOperationException($"Expected token '{HtmlToken.StartTag}' or '{HtmlToken.EndTag}' but current token is '{Token}'");
 	}
 
 	private static int GetRentLength(int minimumLength)

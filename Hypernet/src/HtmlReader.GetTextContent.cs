@@ -11,13 +11,13 @@ public ref partial struct HtmlReader
 	/// </summary>
 	/// <param name="options">Controls which textual sources are included and whether whitespace is normalized.</param>
 	/// <returns>The extracted text content for the current element subtree.</returns>
-	/// <exception cref="InvalidOperationException">Thrown when the current entity kind is not <see cref="HtmlEntityKind.StartTag" />.</exception>
+	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.StartTag" />.</exception>
 	public ReadOnlySpan<char> GetTextContent(HtmlTextContentOptions options = HtmlTextContentOptions.None)
 	{
-		ThrowIfUnexpectedEntity(HtmlEntityKind.StartTag);
+		ThrowIfUnexpectedEntity(HtmlToken.StartTag);
 		if (!IsPersistentStartTag())
 		{
-			SetCurrentEntity(HtmlEntityKind.EndTag, _depth - 1, _currentData);
+			SetCurrentEntity(HtmlToken.EndTag, _depth - 1, _currentData);
 			return default;
 		}
 
@@ -35,15 +35,15 @@ public ref partial struct HtmlReader
 
 		try
 		{
-			while (Read() == HtmlReadResult.Node)
+			while (Read())
 			{
-				if (ignoredDepth < 0 && _kind == HtmlEntityKind.StartTag && !includeNonContentText && IsNonContentTag(_currentData))
+				if (ignoredDepth < 0 && _token == HtmlToken.StartTag && !includeNonContentText && IsNonContentTag(_currentData))
 				{
 					ignoredDepth = _depth - 1;
 				}
 				else if (ignoredDepth < 0)
 				{
-					if (_kind == HtmlEntityKind.Text || _kind == HtmlEntityKind.Comment && includeComments)
+					if (_token == HtmlToken.Text || _token == HtmlToken.Comment && includeComments)
 					{
 						var written = RewriteContentInPlace(_currentData, keepUnknownEntities);
 						if (written > 0)
@@ -56,12 +56,12 @@ public ref partial struct HtmlReader
 					}
 				}
 
-				if (_kind == HtmlEntityKind.EndTag && _depth == ignoredDepth)
+				if (_token == HtmlToken.EndTag && _depth == ignoredDepth)
 				{
 					ignoredDepth = -1;
 				}
 
-				if (_kind == HtmlEntityKind.EndTag && _depth == targetDepth)
+				if (_token == HtmlToken.EndTag && _depth == targetDepth)
 				{
 					break;
 				}

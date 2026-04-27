@@ -8,32 +8,32 @@ public sealed partial class HtmlReaderTests
 		using var content = HtmlContent.Create("<div><p>Hello</div>");
 		var reader = new HtmlReader(content.Span);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
 		Assert.Equal("div", reader.TagName.ToString());
 		Assert.Equal(1, reader.Depth);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
 		Assert.Equal("p", reader.TagName.ToString());
 		Assert.Equal(2, reader.Depth);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.Text, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
 		Assert.Equal("Hello", reader.TextNode.ToString());
 		Assert.Equal(2, reader.Depth);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("p", reader.TagName.ToString());
 		Assert.Equal(1, reader.Depth);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName.ToString());
 		Assert.Equal(0, reader.Depth);
 
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -42,21 +42,21 @@ public sealed partial class HtmlReaderTests
 		using var content = HtmlContent.Create("<DIV><P>x</div>");
 		var reader = new HtmlReader(content.Span);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
+		Assert.True(reader.Read());
 		Assert.Equal("DIV", reader.TagName.ToString());
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
+		Assert.True(reader.Read());
 		Assert.Equal("P", reader.TagName.ToString());
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
+		Assert.True(reader.Read());
 		Assert.Equal("x", reader.TextNode.ToString());
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("P", reader.TagName.ToString());
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("DIV", reader.TagName.ToString());
 	}
 
@@ -74,7 +74,7 @@ public sealed partial class HtmlReaderTests
 		AssertText(ref reader, "Two", 2);
 		AssertEndTag(ref reader, "li", 1);
 		AssertEndTag(ref reader, "ul", 0);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -91,7 +91,7 @@ public sealed partial class HtmlReaderTests
 		AssertText(ref reader, "Next", 2);
 		AssertEndTag(ref reader, "dt", 1);
 		AssertEndTag(ref reader, "dl", 0);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -108,7 +108,7 @@ public sealed partial class HtmlReaderTests
 		AssertText(ref reader, "Second", 2);
 		AssertEndTag(ref reader, "dd", 1);
 		AssertEndTag(ref reader, "dl", 0);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -125,7 +125,7 @@ public sealed partial class HtmlReaderTests
 		AssertText(ref reader, "Two", 2);
 		AssertEndTag(ref reader, "h2", 1);
 		AssertEndTag(ref reader, "div", 0);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -139,7 +139,7 @@ public sealed partial class HtmlReaderTests
 		AssertText(ref reader, "hello", 2);
 		AssertEndTag(ref reader, "x-item", 1);
 		AssertEndTag(ref reader, "x-shell", 0);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -149,15 +149,15 @@ public sealed partial class HtmlReaderTests
 		var reader = new HtmlReader(content.Span);
 
 		AssertStartTag(ref reader, "div", 1);
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.Comment, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Comment, reader.Token);
 		Assert.Equal("note", reader.Comment.ToString());
 		Assert.Equal(1, reader.Depth);
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName.ToString());
 		Assert.Equal(0, reader.Depth);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -169,7 +169,7 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "div", 1);
 		AssertText(ref reader, "ok", 1);
 		AssertEndTag(ref reader, "div", 0);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -180,7 +180,7 @@ public sealed partial class HtmlReaderTests
 
 		AssertText(ref reader, "<", 0);
 		AssertText(ref reader, "1", 0);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -192,7 +192,7 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "div", 1);
 		AssertStartTag(ref reader, "widget", 2);
 		AssertEndTag(ref reader, "div", 0);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -201,29 +201,29 @@ public sealed partial class HtmlReaderTests
 		using var content = HtmlContent.Create("<div><input type=text>Hi</span></div>");
 		var reader = new HtmlReader(content.Span);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
 		Assert.Equal("div", reader.TagName.ToString());
 		Assert.Equal(1, reader.Depth);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
 		Assert.Equal("input", reader.TagName.ToString());
 		Assert.Equal(2, reader.Depth);
 		Assert.True(reader.TryGetAttribute("type", out var type));
 		Assert.Equal("text", type.ToString());
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.Text, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
 		Assert.Equal("Hi", reader.TextNode.ToString());
 		Assert.Equal(1, reader.Depth);
 
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName.ToString());
 		Assert.Equal(0, reader.Depth);
 
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -235,7 +235,7 @@ public sealed partial class HtmlReaderTests
 		AssertStartTag(ref reader, "div", 1);
 		AssertText(ref reader, "ok", 1);
 		AssertEndTag(ref reader, "div", 0);
-		Assert.Equal(HtmlReadResult.EndOfDocument, reader.Read());
+		Assert.False(reader.Read());
 	}
 
 	[Fact]
@@ -254,24 +254,24 @@ public sealed partial class HtmlReaderTests
 
 	private static void AssertStartTag(ref HtmlReader reader, string expectedName, int expectedDepth)
 	{
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.StartTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
 		Assert.Equal(expectedName, reader.TagName.ToString());
 		Assert.Equal(expectedDepth, reader.Depth);
 	}
 
 	private static void AssertEndTag(ref HtmlReader reader, string expectedName, int expectedDepth)
 	{
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.EndTag, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal(expectedName, reader.TagName.ToString());
 		Assert.Equal(expectedDepth, reader.Depth);
 	}
 
 	private static void AssertText(ref HtmlReader reader, string expectedText, int expectedDepth)
 	{
-		Assert.Equal(HtmlReadResult.Node, reader.Read());
-		Assert.Equal(HtmlEntityKind.Text, reader.Kind);
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
 		Assert.Equal(expectedText, reader.TextNode.ToString());
 		Assert.Equal(expectedDepth, reader.Depth);
 	}
