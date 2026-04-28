@@ -12,6 +12,7 @@ public readonly ref struct HtmlContent : IDisposable
 	private readonly static HtmlContentOptions _defaultOptions = new();
 	private readonly Input _input;
 	public readonly Span<char> Span => _input.Buffer.AsSpan(0, _input.Length);
+	public readonly bool IsTruncated => _input.IsTruncated;
 
 	internal HtmlContent(Input input)
 	{
@@ -38,8 +39,13 @@ public readonly ref struct HtmlContent : IDisposable
 		var buffer = GetBuffer(options, null, usedLength: 0, requiredLength: length);
 		data[..length].CopyTo(buffer);
 
-		var input = new Input() { Buffer = buffer, Length = length, Options = options };
-		return new HtmlContent(input);
+		return new HtmlContent(new Input()
+		{
+			Buffer = buffer,
+			Length = length,
+			IsTruncated = data.Length > length,
+			Options = options,
+		});
 	}
 
 	/// <summary>
@@ -63,29 +69,34 @@ public readonly ref struct HtmlContent : IDisposable
 		}
 
 		data = SkipPreamble(data, encoding);
-		var buffer = GetBuffer(options, null, usedLength: 0, requiredLength: encoding.GetMaxCharCount((int)data.Length));
+
+		char[]? buffer = GetBuffer(options, null, usedLength: 0, requiredLength: encoding.GetMaxCharCount((int)data.Length));
 		var length = 0;
-		var decoder = encoding.GetDecoder();
+		var isTruncated = false;
+		var decoding = new DecodingState(encoding, encoding.GetDecoder());
 		foreach (var segment in data)
 		{
-			var writableLength = Math.Min(options.MaxBufferSize - length, buffer.Length - length);
-			if (writableLength <= 0)
+			if (!DecodeSpanToBuffer(segment.Span, options, decoding, ref buffer, ref length))
 			{
+				isTruncated = true;
 				break;
 			}
-
-			decoder.Convert(segment.Span, buffer.AsSpan(length, writableLength), flush: false, out _, out var charsUsed, out _);
-			length += charsUsed;
 		}
 
-		var flushWritableLength = Math.Min(options.MaxBufferSize - length, buffer.Length - length);
-		if (flushWritableLength > 0)
+		if (!isTruncated)
 		{
-			decoder.Convert([], buffer.AsSpan(length, flushWritableLength), flush: true, out _, out var charsUsed, out _);
-			length += charsUsed;
+			FlushDecoder(options, decoding, ref buffer, ref length, ref isTruncated);
 		}
 
-		return new HtmlContent(new Input() { Buffer = buffer, Length = length, Options = options });
+		buffer ??= GetBuffer(options, null, usedLength: 0, requiredLength: 0);
+
+		return new HtmlContent(new Input()
+		{
+			Buffer = buffer,
+			Length = length,
+			IsTruncated = isTruncated,
+			Options = options,
+		});
 	}
 
 	/// <summary>
@@ -120,6 +131,7 @@ public readonly ref struct HtmlContent : IDisposable
 			byte[] byteBuffer = options.ByteBufferPool.Rent(Math.Max(options.InitialBufferSize, 1024));
 			var bufferedByteCount = 0;
 			var length = 0;
+			var isTruncated = false;
 			var skipPreamble = true;
 			try
 			{
@@ -132,7 +144,6 @@ public readonly ref struct HtmlContent : IDisposable
 						options.ByteBufferPool.Return(byteBuffer);
 						byteBuffer = newBuffer;
 					}
-
 					var destination = decodingState is null
 						? byteBuffer.AsMemory(bufferedByteCount)
 						: byteBuffer.AsMemory();
@@ -157,14 +168,20 @@ public readonly ref struct HtmlContent : IDisposable
 					}
 					else if (bytesRead > 0)
 					{
-						DecodeSpanToBuffer(source, decodingState.Value, flush: false);
+						DecodeSpan(source, decodingState.Value);
 					}
 
 					if (isCompleted)
 					{
-						DecodeSpanToBuffer([], decodingState.Value, flush: true);
+						FlushDecoder(options, decodingState.Value, ref buffer, ref length, ref isTruncated);
 						buffer ??= GetBuffer(options, null, usedLength: 0, requiredLength: 0);
-						return new Input() { Buffer = buffer, Length = length, Options = options };
+						return new Input()
+						{
+							Buffer = buffer,
+							Length = length,
+							IsTruncated = isTruncated,
+							Options = options,
+						};
 					}
 				}
 			}
@@ -174,7 +191,6 @@ public readonly ref struct HtmlContent : IDisposable
 				{
 					options.TextBufferPool.Return(buffer);
 				}
-
 				throw;
 			}
 			finally
@@ -196,35 +212,24 @@ public readonly ref struct HtmlContent : IDisposable
 					skipPreamble = false;
 				}
 
-				DecodeToBuffer(data, decoding, flush: false);
+				DecodeToBuffer(data, decoding);
 				bufferedByteCount = 0;
 			}
 
-			void DecodeToBuffer(ReadOnlySequence<byte> data, DecodingState decoding, bool flush)
+			void DecodeToBuffer(ReadOnlySequence<byte> data, DecodingState decoding)
 			{
 				foreach (var segment in data)
 				{
-					DecodeSpanToBuffer(segment.Span, decoding, flush: false);
-				}
-
-				if (flush)
-				{
-					DecodeSpanToBuffer([], decoding, flush: true);
+					DecodeSpan(segment.Span, decoding);
 				}
 			}
 
-			void DecodeSpanToBuffer(ReadOnlySpan<byte> data, DecodingState decoding, bool flush)
+			void DecodeSpan(ReadOnlySpan<byte> data, DecodingState decoding)
 			{
-				var logicalRemaining = options.MaxBufferSize - length;
-				if (logicalRemaining <= 0)
+				if (!DecodeSpanToBuffer(data, options, decoding, ref buffer, ref length))
 				{
-					return;
+					isTruncated = true;
 				}
-
-				buffer = GetBuffer(options, buffer, length, length + decoding.Encoding.GetMaxCharCount(data.Length));
-				var writableLength = Math.Min(logicalRemaining, buffer.Length - length);
-				decoding.Decoder.Convert(data, buffer.AsSpan(length, writableLength), flush, out _, out var charsUsed, out _);
-				length += charsUsed;
 			}
 		}
 	}
@@ -259,6 +264,7 @@ public readonly ref struct HtmlContent : IDisposable
 			var decodingState = DecodingState.FromEncoding(options.Encoding);
 			char[]? buffer = null;
 			var length = 0;
+			var isTruncated = false;
 			long sniffedLength = 0;
 			var skipPreamble = true;
 			try
@@ -290,15 +296,22 @@ public readonly ref struct HtmlContent : IDisposable
 							skipPreamble = false;
 						}
 
-						DecodeToBuffer(source, decodingState.Value, flush: false);
+						DecodeToBuffer(source, decodingState.Value);
 					}
 
 					if (result.IsCompleted)
 					{
-						DecodeToBuffer(ReadOnlySequence<byte>.Empty, decodingState.Value, flush: true);
+						FlushDecoder(options, decodingState.Value, ref buffer, ref length, ref isTruncated);
 						reader.AdvanceTo(source.End);
 						buffer ??= GetBuffer(options, null, usedLength: 0, requiredLength: 0);
-						return new Input() { Buffer = buffer, Length = length, Options = options };
+
+						return new Input()
+						{
+							Buffer = buffer,
+							Length = length,
+							IsTruncated = isTruncated,
+							Options = options,
+						};
 					}
 
 					reader.AdvanceTo(source.End);
@@ -313,36 +326,67 @@ public readonly ref struct HtmlContent : IDisposable
 				throw;
 			}
 
-			void DecodeToBuffer(ReadOnlySequence<byte> data, DecodingState decoding, bool flush)
+			void DecodeToBuffer(ReadOnlySequence<byte> data, DecodingState decoding)
 			{
 				foreach (var segment in data)
 				{
-					var logicalRemaining = options.MaxBufferSize - length;
-					if (logicalRemaining <= 0)
+					if (!DecodeSpanToBuffer(segment.Span, options, decoding, ref buffer, ref length))
 					{
+						isTruncated = true;
 						return;
 					}
-
-					buffer = GetBuffer(options, buffer, length, length + decoding.Encoding.GetMaxCharCount(segment.Length));
-					var writableLength = Math.Min(logicalRemaining, buffer.Length - length);
-					decoding.Decoder.Convert(segment.Span, buffer.AsSpan(length, writableLength), flush: false, out _, out var charsUsed, out _);
-					length += charsUsed;
-				}
-
-				if (flush)
-				{
-					var logicalRemaining = options.MaxBufferSize - length;
-					if (logicalRemaining <= 0)
-					{
-						return;
-					}
-
-					buffer = GetBuffer(options, buffer, length, length + 4);
-					var writableLength = Math.Min(logicalRemaining, buffer.Length - length);
-					decoding.Decoder.Convert([], buffer.AsSpan(length, writableLength), flush: true, out _, out var charsUsed, out _);
-					length += charsUsed;
 				}
 			}
+		}
+	}
+
+	private static bool DecodeSpanToBuffer(
+		ReadOnlySpan<byte> data,
+		HtmlContentOptions options,
+		DecodingState decoding,
+		ref char[]? buffer,
+		ref int length)
+	{
+		var logicalRemaining = options.MaxBufferSize - length;
+		if (logicalRemaining <= 0)
+		{
+			return data.IsEmpty;
+		}
+
+		buffer = GetBuffer(options, buffer, length, length + decoding.Encoding.GetMaxCharCount(data.Length));
+		var writableLength = Math.Min(logicalRemaining, buffer.Length - length);
+		decoding.Decoder.Convert(
+			data,
+			buffer.AsSpan(length, writableLength),
+			flush: false,
+			out var bytesUsed,
+			out var charsUsed,
+			out _);
+		length += charsUsed;
+		return bytesUsed == data.Length;
+	}
+
+	private static void FlushDecoder(
+		HtmlContentOptions options,
+		DecodingState decoding,
+		ref char[]? buffer,
+		ref int length,
+		ref bool isTruncated)
+	{
+		var logicalRemaining = options.MaxBufferSize - length;
+		if (logicalRemaining <= 0)
+		{
+			Span<char> scratch = stackalloc char[1];
+			decoding.Decoder.Convert([], scratch, flush: true, out _, out var charsUsed, out var completed);
+			isTruncated |= charsUsed > 0 || !completed;
+		}
+		else
+		{
+			buffer = GetBuffer(options, buffer, length, length + 4);
+			var writableLength = Math.Min(logicalRemaining, buffer.Length - length);
+			decoding.Decoder.Convert([], buffer.AsSpan(length, writableLength), flush: true, out _, out var charsUsed, out var completed);
+			length += charsUsed;
+			isTruncated |= !completed;
 		}
 	}
 
@@ -422,6 +466,7 @@ public readonly ref struct HtmlContent : IDisposable
 	{
 		public char[] Buffer { get; init; }
 		public int Length { get; init; }
+		public bool IsTruncated { get; init; }
 		public HtmlContentOptions Options { get; init; }
 	}
 

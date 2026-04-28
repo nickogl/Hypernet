@@ -295,6 +295,170 @@ public sealed class HtmlContentTests : IDisposable
 		}
 	}
 
+	[Fact]
+	public void Create_FromSpan_SetsIsTruncated_WhenMaxBufferSizeIsExceeded()
+	{
+		var options = new HtmlContentOptions()
+		{
+			TextBufferPool = _textPool,
+			ByteBufferPool = _bytePool,
+			InitialBufferSize = 4,
+			MaxBufferSize = 5,
+		};
+
+		using var content = HtmlContent.Create("<div>Hello</div>", options);
+
+		Assert.Equal("<div>", content.Span.ToString());
+		Assert.True(content.IsTruncated);
+	}
+
+	[Fact]
+	public void Create_FromSpan_DoesNotSetIsTruncated_WhenMaxBufferSizeIsNotExceeded()
+	{
+		var options = new HtmlContentOptions()
+		{
+			TextBufferPool = _textPool,
+			ByteBufferPool = _bytePool,
+			InitialBufferSize = 4,
+			MaxBufferSize = 16,
+		};
+
+		using var content = HtmlContent.Create("<div>Hello</div>", options);
+
+		Assert.Equal("<div>Hello</div>", content.Span.ToString());
+		Assert.False(content.IsTruncated);
+	}
+
+	[Fact]
+	public void Create_FromSequence_SetsIsTruncated_WhenMaxBufferSizeIsExceeded()
+	{
+		var options = new HtmlContentOptions()
+		{
+			TextBufferPool = _textPool,
+			ByteBufferPool = _bytePool,
+			Encoding = Encoding.UTF8,
+			InitialBufferSize = 4,
+			MaxBufferSize = 5,
+		};
+
+		using var content = HtmlContent.Create(new ReadOnlySequence<byte>(Encoding.UTF8.GetBytes("<div>Hello</div>")), options);
+
+		Assert.Equal("<div>", content.Span.ToString());
+		Assert.True(content.IsTruncated);
+	}
+
+	[Fact]
+	public void Create_FromSequence_DoesNotSetIsTruncated_WhenMaxBufferSizeIsNotExceeded()
+	{
+		var options = new HtmlContentOptions()
+		{
+			TextBufferPool = _textPool,
+			ByteBufferPool = _bytePool,
+			Encoding = Encoding.UTF8,
+			InitialBufferSize = 4,
+			MaxBufferSize = 16,
+		};
+
+		using var content = HtmlContent.Create(new ReadOnlySequence<byte>(Encoding.UTF8.GetBytes("<div>Hello</div>")), options);
+
+		Assert.Equal("<div>Hello</div>", content.Span.ToString());
+		Assert.False(content.IsTruncated);
+	}
+
+	[Fact]
+	public async Task CreateAsync_Stream_SetsIsTruncated_WhenMaxBufferSizeIsExceeded()
+	{
+		var options = new HtmlContentOptions()
+		{
+			TextBufferPool = _textPool,
+			ByteBufferPool = _bytePool,
+			Encoding = Encoding.UTF8,
+			InitialBufferSize = 4,
+			MaxBufferSize = 5,
+		};
+		using var stream = new MemoryStream(Encoding.UTF8.GetBytes("<div>Hello</div>"));
+
+		using var content = await HtmlContent.CreateAsync(stream, options, CancellationToken.None);
+
+		Assert.Equal("<div>", content.Span.ToString());
+		Assert.True(content.IsTruncated);
+	}
+
+	[Fact]
+	public async Task CreateAsync_Stream_DoesNotSetIsTruncated_WhenMaxBufferSizeIsNotExceeded()
+	{
+		var options = new HtmlContentOptions()
+		{
+			TextBufferPool = _textPool,
+			ByteBufferPool = _bytePool,
+			Encoding = Encoding.UTF8,
+			InitialBufferSize = 4,
+			MaxBufferSize = 16,
+		};
+		using var stream = new MemoryStream(Encoding.UTF8.GetBytes("<div>Hello</div>"));
+
+		using var content = await HtmlContent.CreateAsync(stream, options, CancellationToken.None);
+
+		Assert.Equal("<div>Hello</div>", content.Span.ToString());
+		Assert.False(content.IsTruncated);
+	}
+
+	[Fact]
+	public async Task CreateAsync_PipeReader_SetsIsTruncated_WhenMaxBufferSizeIsExceeded()
+	{
+		var options = new HtmlContentOptions()
+		{
+			TextBufferPool = _textPool,
+			ByteBufferPool = _bytePool,
+			Encoding = Encoding.UTF8,
+			InitialBufferSize = 4,
+			MaxBufferSize = 5,
+		};
+		var pipe = new Pipe();
+		pipe.Writer.Write(Encoding.UTF8.GetBytes("<div>Hello</div>"));
+		await pipe.Writer.CompleteAsync();
+
+		try
+		{
+			using var content = await HtmlContent.CreateAsync(pipe.Reader, options, CancellationToken.None);
+
+			Assert.Equal("<div>", content.Span.ToString());
+			Assert.True(content.IsTruncated);
+		}
+		finally
+		{
+			pipe.Reader.Complete();
+		}
+	}
+
+	[Fact]
+	public async Task CreateAsync_PipeReader_DoesNotSetIsTruncated_WhenMaxBufferSizeIsNotExceeded()
+	{
+		var options = new HtmlContentOptions()
+		{
+			TextBufferPool = _textPool,
+			ByteBufferPool = _bytePool,
+			Encoding = Encoding.UTF8,
+			InitialBufferSize = 4,
+			MaxBufferSize = 16,
+		};
+		var pipe = new Pipe();
+		pipe.Writer.Write(Encoding.UTF8.GetBytes("<div>Hello</div>"));
+		await pipe.Writer.CompleteAsync();
+
+		try
+		{
+			using var content = await HtmlContent.CreateAsync(pipe.Reader, options, CancellationToken.None);
+
+			Assert.Equal("<div>Hello</div>", content.Span.ToString());
+			Assert.False(content.IsTruncated);
+		}
+		finally
+		{
+			pipe.Reader.Complete();
+		}
+	}
+
 	private static ReadOnlySequence<byte> CreateSequence(params byte[][] segments)
 	{
 		ArgumentOutOfRangeException.ThrowIfZero(segments.Length);
