@@ -24,12 +24,12 @@ public sealed class HtmlContentOptions
 	public ArrayPool<byte> ByteBufferPool { get; init; } = ArrayPool<byte>.Shared;
 
 	/// <summary>
-	/// Initial buffer size. The default is <c>16_384</c>.
+	/// Initial buffer size. The default is <c>128 KiB</c>.
 	/// </summary>
-	public int InitialBufferSize { get; init; } = 16_384;
+	public int InitialBufferSize { get; init; } = 131_072;
 
 	/// <summary>
-	/// Maximum buffer size. The default is <c>1_048_576</c>.
+	/// Maximum buffer size. The default is <c>1 MiB</c>.
 	/// </summary>
 	public int MaxBufferSize { get; init; } = 1_048_576;
 }

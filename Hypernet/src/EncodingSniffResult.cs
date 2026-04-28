@@ -1,6 +1,6 @@
 namespace Hypernet;
 
-internal enum HtmlEncodingSniffResult
+internal enum EncodingSniffResult
 {
 	Detected,
 	NeedMoreData,

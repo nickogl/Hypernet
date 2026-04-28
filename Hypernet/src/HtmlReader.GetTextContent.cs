@@ -109,7 +109,7 @@ public ref partial struct HtmlReader
 
 			var entityLength = source[entityIndex..].IndexOf(';');
 			if (entityLength >= 0
-				&& HtmlCharacterReference.TryDecode(source.Slice(entityIndex, entityLength + 1), decodedEntity, out var charsWritten))
+				&& CharacterReference.TryDecode(source.Slice(entityIndex, entityLength + 1), decodedEntity, out var charsWritten))
 			{
 				Append(decodedEntity[..charsWritten], source, ref length);
 				cursor = entityIndex + entityLength + 1;

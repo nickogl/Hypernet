@@ -2,9 +2,9 @@ using System.Text;
 
 namespace Hypernet;
 
-internal static class HtmlCharset
+internal static class Charset
 {
-	static HtmlCharset()
+	static Charset()
 	{
 		Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
 	}

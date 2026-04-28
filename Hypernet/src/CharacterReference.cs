@@ -3,7 +3,7 @@ using System.Text;
 
 namespace Hypernet;
 
-internal static class HtmlCharacterReference
+internal static class CharacterReference
 {
 	public static bool TryDecode(ReadOnlySpan<char> entity, Span<char> destination, out int charsWritten)
 	{

@@ -4,7 +4,7 @@ using System.Text;
 
 namespace Hypernet;
 
-internal struct HtmlEncodingSniffer
+internal struct EncodingSniffer
 {
 	private const int PrescanByteLimit = 1024;
 	private const string CharsetPrefix = "charset=";
@@ -16,7 +16,7 @@ internal struct HtmlEncodingSniffer
 	private byte _thirdByte;
 	private int _bomLength;
 
-	public HtmlEncodingSniffResult Append(ReadOnlySequence<byte> data, bool isFinalBlock, out Encoding? encoding)
+	public EncodingSniffResult Append(ReadOnlySequence<byte> data, bool isFinalBlock, out Encoding? encoding)
 	{
 		foreach (var segment in data)
 		{
@@ -29,16 +29,16 @@ internal struct HtmlEncodingSniffer
 
 		if (TryDetectBomEncoding(out encoding) || TryDetectCharsetEncoding(out encoding))
 		{
-			return HtmlEncodingSniffResult.Detected;
+			return EncodingSniffResult.Detected;
 		}
 
 		if (!isFinalBlock && _prescanLength < PrescanByteLimit)
 		{
-			return HtmlEncodingSniffResult.NeedMoreData;
+			return EncodingSniffResult.NeedMoreData;
 		}
 
 		encoding = null;
-		return HtmlEncodingSniffResult.UseFallback;
+		return EncodingSniffResult.UseFallback;
 	}
 
 	private void Append(ReadOnlySpan<byte> data)
@@ -115,7 +115,7 @@ internal struct HtmlEncodingSniffer
 			return false;
 		}
 
-		return HtmlCharset.TryGetEncoding(charset, out encoding);
+		return Charset.TryGetEncoding(charset, out encoding);
 	}
 
 	private readonly bool NeedsMoreBomBytes()

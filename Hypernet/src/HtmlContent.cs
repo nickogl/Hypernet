@@ -63,7 +63,7 @@ public readonly ref struct HtmlContent : IDisposable
 		var encoding = options.Encoding;
 		if (encoding is null)
 		{
-			var sniffer = new HtmlEncodingSniffer();
+			var sniffer = new EncodingSniffer();
 			sniffer.Append(data, isFinalBlock: true, out encoding);
 			encoding ??= Encoding.UTF8;
 		}
@@ -125,7 +125,7 @@ public readonly ref struct HtmlContent : IDisposable
 
 		static async ValueTask<Input> CreateAsyncCore(Stream stream, HtmlContentOptions options, CancellationToken cancellationToken)
 		{
-			var sniffer = new HtmlEncodingSniffer();
+			var sniffer = new EncodingSniffer();
 			var decodingState = DecodingState.FromEncoding(options.Encoding);
 			char[]? buffer = null;
 			byte[] byteBuffer = options.ByteBufferPool.Rent(Math.Max(options.InitialBufferSize, 1024));
@@ -157,7 +157,7 @@ public readonly ref struct HtmlContent : IDisposable
 					{
 						bufferedByteCount += bytesRead;
 						var sniffResult = sniffer.Append(new ReadOnlySequence<byte>(byteBuffer, 0, bufferedByteCount), isCompleted, out var encoding);
-						if (sniffResult == HtmlEncodingSniffResult.NeedMoreData)
+						if (sniffResult == EncodingSniffResult.NeedMoreData)
 						{
 							continue;
 						}
@@ -260,7 +260,7 @@ public readonly ref struct HtmlContent : IDisposable
 
 		static async ValueTask<Input> CreateAsyncCore(PipeReader reader, HtmlContentOptions options, CancellationToken cancellationToken)
 		{
-			var sniffer = new HtmlEncodingSniffer();
+			var sniffer = new EncodingSniffer();
 			var decodingState = DecodingState.FromEncoding(options.Encoding);
 			char[]? buffer = null;
 			var length = 0;
@@ -278,7 +278,7 @@ public readonly ref struct HtmlContent : IDisposable
 					{
 						var sniffResult = sniffer.Append(source.Slice(sniffedLength), result.IsCompleted, out var encoding);
 						sniffedLength = source.Length;
-						if (sniffResult == HtmlEncodingSniffResult.NeedMoreData)
+						if (sniffResult == EncodingSniffResult.NeedMoreData)
 						{
 							reader.AdvanceTo(source.Start, source.End);
 							continue;
