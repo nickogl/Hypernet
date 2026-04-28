@@ -239,7 +239,7 @@ public sealed partial class HtmlReaderTests
 	}
 
 	[Fact]
-	public void Read_ThrowsWhenMaximumDepthIsExceeded()
+	public void Read_Throws_WhenMaximumDepthIsExceeded()
 	{
 		Assert.Throws<InvalidOperationException>(() =>
 		{
@@ -291,6 +291,107 @@ public sealed partial class HtmlReaderTests
 		AssertText(ref reader, "x", 2);
 		AssertEndTag(ref reader, "span", 1);
 		AssertEndTag(ref reader, "div", 0);
+		Assert.False(reader.Read());
+	}
+
+	[Fact]
+	public void Read_DoesNotParseStartTag_WhenAsciiPrefixIsFollowedByNonAsciiCharacter()
+	{
+		using var content = HtmlContent.Create("<x-é>text</x-é>");
+		var reader = new HtmlReader(content.Span);
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
+		Assert.Equal("<", reader.Text.ToString());
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
+		Assert.Equal("x-é>text", reader.Text.ToString());
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
+		Assert.Equal("<", reader.Text.ToString());
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
+		Assert.Equal("/x-é>", reader.Text.ToString());
+
+		Assert.False(reader.Read());
+	}
+
+	[Fact]
+	public void Read_DoesNotParseStartTag_WhenAsciiPrefixIsFollowedByInvalidNameCharacter()
+	{
+		using var content = HtmlContent.Create("<x@foo>text</x@foo>");
+		var reader = new HtmlReader(content.Span);
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
+		Assert.Equal("<", reader.Text.ToString());
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
+		Assert.Equal("x@foo>text", reader.Text.ToString());
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
+		Assert.Equal("<", reader.Text.ToString());
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
+		Assert.Equal("/x@foo>", reader.Text.ToString());
+
+		Assert.False(reader.Read());
+	}
+
+	[Fact]
+	public void Read_StillParsesAsciiCustomElementNames()
+	{
+		using var content = HtmlContent.Create("<x-foo>text</x-foo>");
+		var reader = new HtmlReader(content.Span);
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
+		Assert.Equal("x-foo", reader.TagName.ToString());
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.Text, reader.Token);
+		Assert.Equal("text", reader.Text.ToString());
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
+		Assert.Equal("x-foo", reader.TagName.ToString());
+
+		Assert.False(reader.Read());
+	}
+
+	[Fact]
+	public void Read_StillParsesStartTag_WhenNameIsFollowedBySlash()
+	{
+		using var content = HtmlContent.Create("<x-foo/>");
+		var reader = new HtmlReader(content.Span);
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
+		Assert.Equal("x-foo", reader.TagName.ToString());
+
+		Assert.False(reader.Read());
+	}
+
+	[Fact]
+	public void Read_StillParsesEndTag_WhenNameIsFollowedByWhitespace()
+	{
+		using var content = HtmlContent.Create("<x-foo></x-foo >");
+		var reader = new HtmlReader(content.Span);
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
+		Assert.Equal("x-foo", reader.TagName.ToString());
+
+		Assert.True(reader.Read());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
+		Assert.Equal("x-foo", reader.TagName.ToString());
+
 		Assert.False(reader.Read());
 	}
 

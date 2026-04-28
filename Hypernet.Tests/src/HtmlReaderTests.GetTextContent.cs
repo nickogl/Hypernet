@@ -82,7 +82,7 @@ public sealed partial class HtmlReaderTests
 	}
 
 	[Fact]
-	public void GetTextContent_NormalizesWhitespaceWhenRequested()
+	public void GetTextContent_NormalizesWhitespace_WhenRequested()
 	{
 		using var content = HtmlContent.Create("<div>  A\t&nbsp;<span>\r\nB</span>   C  </div>");
 		var reader = new HtmlReader(content.Span);
@@ -108,7 +108,7 @@ public sealed partial class HtmlReaderTests
 	}
 
 	[Fact]
-	public void GetTextContent_IncludesCommentsWhenRequested()
+	public void GetTextContent_IncludesComments_WhenRequested()
 	{
 		using var content = HtmlContent.Create("<div>a<!--&amp;--><span>b</span></div>");
 		var reader = new HtmlReader(content.Span);
@@ -134,7 +134,7 @@ public sealed partial class HtmlReaderTests
 	}
 
 	[Fact]
-	public void GetTextContent_IncludesNonContentTextWhenRequested()
+	public void GetTextContent_IncludesNonContentText_WhenRequested()
 	{
 		using var content = HtmlContent.Create("<div>a<script>x&amp;</script><style>y</style><textarea>z</textarea><template>q</template>b</div>");
 		var reader = new HtmlReader(content.Span);

@@ -7,10 +7,17 @@ namespace Hypernet;
 /// Provides a flat, forward-only HTML reader over buffered storage.
 /// </summary>
 /// <remarks>
+/// <para>
 /// Do not copy this struct under any circumstances. Always pass it by ref.
 /// This is because it contains internal references to its own inline storage.
 /// There are diagnostics in debug mode to flag invalid usage, so make sure to
 /// meticulously test your reader code.
+/// </para>
+/// <para>
+/// This reader is optimized for high-throughput processing of common HTML fragments.
+/// It recognizes ASCII tag names only. Markup with non-ASCII tag names is treated as
+/// text rather than as start or end tags.
+/// </para>
 /// </remarks>
 public ref partial struct HtmlReader : IDisposable
 {

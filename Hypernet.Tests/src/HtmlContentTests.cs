@@ -82,7 +82,7 @@ public sealed class HtmlContentTests : IDisposable
 	}
 
 	[Fact]
-	public void Create_ThrowsWhenInitialBufferSizeExceedsMaxBufferSize()
+	public void Create_Throws_WhenInitialBufferSizeExceedsMaxBufferSize()
 	{
 		var options = new HtmlContentOptions() { InitialBufferSize = 8, MaxBufferSize = 4 };
 
@@ -90,7 +90,7 @@ public sealed class HtmlContentTests : IDisposable
 	}
 
 	[Fact]
-	public void Create_ThrowsWhenInitialBufferSizeIsNegative()
+	public void Create_Throws_WhenInitialBufferSizeIsNegative()
 	{
 		var options = new HtmlContentOptions() { InitialBufferSize = -1 };
 
@@ -98,7 +98,7 @@ public sealed class HtmlContentTests : IDisposable
 	}
 
 	[Fact]
-	public void Create_ThrowsWhenMaxBufferSizeIsNegative()
+	public void Create_Throws_WhenMaxBufferSizeIsNegative()
 	{
 		var options = new HtmlContentOptions() { MaxBufferSize = -1 };
 

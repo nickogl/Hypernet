@@ -3,7 +3,7 @@ namespace Hypernet.Tests;
 public sealed partial class HtmlReaderTests
 {
 	[Fact]
-	public void Constructor_ThrowsWhenMaxDepthIsNegative()
+	public void Constructor_Throws_WhenMaxDepthIsNegative()
 	{
 		var options = new HtmlReaderOptions() { MaxDepth = -1 };
 
@@ -11,7 +11,7 @@ public sealed partial class HtmlReaderTests
 	}
 
 	[Fact]
-	public void Constructor_ThrowsWhenInitialTextContentSegmentSizeIsNegative()
+	public void Constructor_Throws_WhenInitialTextContentSegmentSizeIsNegative()
 	{
 		var options = new HtmlReaderOptions() { InitialTextContentSegmentSize = -1 };
 

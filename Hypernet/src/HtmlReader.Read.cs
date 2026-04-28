@@ -143,12 +143,15 @@ public ref partial struct HtmlReader
 		{
 			return false;
 		}
+		var nameStart = cursor++;
 
-		var nameStart = cursor;
-		cursor++;
 		while (cursor < _data.Length && IsTagNameChar(_data[cursor]))
 		{
 			cursor++;
+		}
+		if (cursor < _data.Length && !IsStartTagNameTerminator(_data[cursor]))
+		{
+			return false;
 		}
 
 		var nameEnd = cursor;
@@ -194,16 +197,22 @@ public ref partial struct HtmlReader
 	private bool TryReadEndTag()
 	{
 		var cursor = _position + 2;
-		if (_position + 1 >= _data.Length || _data[_position + 1] != '/' || cursor >= _data.Length || !IsTagNameStart(_data[cursor]))
+		if (_position + 1 >= _data.Length
+			|| _data[_position + 1] != '/'
+			|| cursor >= _data.Length
+			|| !IsTagNameStart(_data[cursor]))
 		{
 			return false;
 		}
+		var nameStart = cursor++;
 
-		var nameStart = cursor;
-		cursor++;
 		while (cursor < _data.Length && IsTagNameChar(_data[cursor]))
 		{
 			cursor++;
+		}
+		if (cursor < _data.Length && !IsEndTagNameTerminator(_data[cursor]))
+		{
+			return false;
 		}
 
 		var name = _data.Slice(nameStart, cursor - nameStart);
@@ -481,6 +490,18 @@ public ref partial struct HtmlReader
 	private static bool IsHtmlWhitespace(char value)
 	{
 		return value is ' ' or '\t' or '\r' or '\n' or '\f';
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	private static bool IsStartTagNameTerminator(char value)
+	{
+		return value == '>' || value == '/' || IsHtmlWhitespace(value);
+	}
+
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
+	private static bool IsEndTagNameTerminator(char value)
+	{
+		return value == '>' || IsHtmlWhitespace(value);
 	}
 
 	private unsafe void EnsureOpenTagStack()
