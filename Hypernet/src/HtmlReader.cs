@@ -167,33 +167,6 @@ public ref partial struct HtmlReader : IDisposable
 	}
 
 	/// <summary>
-	/// Tries to get the value of a named attribute from the current start tag.
-	/// </summary>
-	/// <remarks>The returned span remains valid as long as the span initially passed to the reader is valid.</remarks>
-	/// <param name="name">The attribute name to search for.</param>
-	/// <param name="value">Receives the attribute value when found.</param>
-	/// <returns><see langword="true" /> when a matching attribute is found; otherwise, <see langword="false" />.</returns>
-	/// <exception cref="InvalidOperationException">
-	/// Thrown when the current token is not <see cref="HtmlToken.StartTag" />.
-	/// </exception>
-	public readonly bool TryGetAttribute(ReadOnlySpan<char> name, out ReadOnlySpan<char> value)
-	{
-		ThrowIfUnexpectedEntity(HtmlToken.StartTag);
-
-		foreach (var attribute in Attributes)
-		{
-			if (attribute.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
-			{
-				value = attribute.Value;
-				return true;
-			}
-		}
-
-		value = default;
-		return false;
-	}
-
-	/// <summary>
 	/// Exposes mutable access to the current text node when the current token is text.
 	/// </summary>
 	/// <returns>A mutable span over the current text node.</returns>
@@ -239,86 +212,6 @@ public ref partial struct HtmlReader : IDisposable
 	private readonly void ThrowUnexpectedTagNameAccess()
 	{
 		throw new InvalidOperationException($"Expected token '{HtmlToken.StartTag}' or '{HtmlToken.EndTag}' but current token is '{Token}'");
-	}
-
-	private static int GetRentLength(int minimumLength)
-	{
-		return minimumLength > 0
-			? (int)BitOperations.RoundUpToPowerOf2((uint)minimumLength)
-			: 1;
-	}
-
-	/// <summary>
-	/// Represents a single attribute exposed by <see cref="Attributes" />.
-	/// </summary>
-	public readonly ref struct HtmlAttribute(ReadOnlySpan<char> name, ReadOnlySpan<char> value)
-	{
-		/// <summary>
-		/// Gets the attribute name.
-		/// </summary>
-		public ReadOnlySpan<char> Name { get; } = name;
-
-		/// <summary>
-		/// Gets the attribute value.
-		/// </summary>
-		public ReadOnlySpan<char> Value { get; } = value;
-	}
-
-	/// <summary>
-	/// Represents a zero-allocation enumerable view over a start tag's attributes.
-	/// </summary>
-	public readonly ref struct AttributeEnumerable
-	{
-		private readonly ReadOnlySpan<char> _data;
-
-		internal AttributeEnumerable(ReadOnlySpan<char> data)
-		{
-			_data = data;
-		}
-
-		/// <summary>
-		/// Gets an enumerator over the current attribute sequence.
-		/// </summary>
-		public AttributeEnumerator GetEnumerator()
-		{
-			return new AttributeEnumerator(_data);
-		}
-	}
-
-	/// <summary>
-	/// Enumerates attributes for the current start tag.
-	/// </summary>
-	public ref struct AttributeEnumerator
-	{
-		private readonly ReadOnlySpan<char> _data;
-		private int _cursor;
-		private HtmlAttribute _current;
-
-		/// <summary>
-		/// Gets the current attribute.
-		/// </summary>
-		public readonly HtmlAttribute Current => _current;
-
-		internal AttributeEnumerator(ReadOnlySpan<char> data)
-		{
-			_data = data;
-			_cursor = 0;
-			_current = default;
-		}
-
-		/// <summary>
-		/// Advances to the next attribute.
-		/// </summary>
-		/// <returns><see langword="true" /> when an attribute is available; otherwise, <see langword="false" />.</returns>
-		public bool MoveNext()
-		{
-			if (!TryReadAttribute(_data, _cursor, out _cursor, out _current))
-			{
-				return false;
-			}
-
-			return true;
-		}
 	}
 
 	private readonly struct OpenTagStackItem

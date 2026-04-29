@@ -7,8 +7,8 @@ namespace Hypernet;
 public ref partial struct HtmlReader
 {
 	private const string CommentStart = "<!--";
-	private static readonly SearchValues<char> _htmlWhitespace = SearchValues.Create(" \t\r\n\f");
-	private static readonly SearchValues<char> _unquotedAttributeTerminators = SearchValues.Create(" \t\r\n\f>/");
+	private const string CommentEnd = "-->";
+	private static readonly SearchValues<char> _markupEndCandidates = SearchValues.Create(">'\"");
 
 	/// <summary>
 	/// Advances the reader to the next logical HTML token.
@@ -23,7 +23,6 @@ public ref partial struct HtmlReader
 		EnsureOpenTagStackIntegrity();
 
 		ClearCurrentEntity();
-
 		while (true)
 		{
 			if (_position >= _data.Length)
@@ -43,30 +42,42 @@ public ref partial struct HtmlReader
 				return true;
 			}
 
-			if (TryReadComment())
+			var next = _data[_position + 1];
+			if (next == '/')
 			{
+				var position = _position;
+				if (TryReadEndTag())
+				{
+					return true;
+				}
+
+				if (_position != position)
+				{
+					continue;
+				}
+
+				ReadSingleCharacterTextNode();
 				return true;
 			}
 
-			var position = _position;
-			if (TryReadEndTag())
+			if (next == '!')
 			{
-				return true;
+				if (TryReadComment())
+				{
+					return true;
+				}
+				if (TrySkipBogusMarkup())
+				{
+					continue;
+				}
 			}
-
-			if (_position != position)
+			else if (next == '?' && TrySkipBogusMarkup())
 			{
 				continue;
 			}
-
-			if (TryReadStartTag())
+			else if (IsTagNameStart(next) && TryReadStartTag())
 			{
 				return true;
-			}
-
-			if (TrySkipBogusMarkup())
-			{
-				continue;
 			}
 
 			ReadSingleCharacterTextNode();
@@ -84,10 +95,10 @@ public ref partial struct HtmlReader
 	private void ReadTextNode()
 	{
 		var start = _position;
-		var index = _data.Slice(start).IndexOf('<');
+		var index = _data[start..].IndexOf('<');
 		var end = index >= 0 ? start + index : _data.Length;
 		_position = end;
-		SetCurrentEntity(HtmlToken.Text, _openTagStack.Length, _data.Slice(start, end - start));
+		SetCurrentEntity(HtmlToken.Text, _openTagStack.Length, _data[start..end]);
 	}
 
 	private void ReadSingleCharacterTextNode()
@@ -103,39 +114,25 @@ public ref partial struct HtmlReader
 		{
 			return false;
 		}
-
-		var remaining = _data.Slice(_position);
+		var remaining = _data[_position..];
 		if (!remaining.StartsWith(CommentStart, StringComparison.Ordinal))
 		{
 			return false;
 		}
 
 		var contentStart = _position + 4;
-		var cursor = contentStart;
-		while (cursor < _data.Length)
+		var tagEndIndex = _data[contentStart..].IndexOf(CommentEnd);
+		if (tagEndIndex < 0)
 		{
-			var hyphenIndex = _data.Slice(cursor).IndexOf('-');
-			if (hyphenIndex < 0)
-			{
-				_position = _data.Length;
-				SetCurrentEntity(HtmlToken.Comment, _openTagStack.Length, _data.Slice(contentStart));
-				return true;
-			}
-
-			cursor += hyphenIndex;
-			if (cursor + 2 < _data.Length && _data[cursor + 1] == '-' && _data[cursor + 2] == '>')
-			{
-				var value = _data.Slice(contentStart, cursor - contentStart);
-				_position = cursor + 3;
-				SetCurrentEntity(HtmlToken.Comment, _openTagStack.Length, value);
-				return true;
-			}
-
-			cursor++;
+			_position = _data.Length;
+			SetCurrentEntity(HtmlToken.Comment, _openTagStack.Length, _data[contentStart..]);
+			return true;
 		}
 
-		_position = _data.Length;
-		SetCurrentEntity(HtmlToken.Comment, _openTagStack.Length, _data.Slice(contentStart));
+		var cursor = contentStart + tagEndIndex;
+		var value = _data[contentStart..cursor];
+		_position = cursor + 3;
+		SetCurrentEntity(HtmlToken.Comment, _openTagStack.Length, value);
 		return true;
 	}
 
@@ -158,7 +155,7 @@ public ref partial struct HtmlReader
 		}
 
 		var nameEnd = cursor;
-		var name = _data.Slice(nameStart, nameEnd - nameStart);
+		var name = _data[nameStart..nameEnd];
 		if (_openTagStack.Length > 0 && ShouldImplicitlyClose(GetOpenTagName(_openTagStack.Length - 1), name))
 		{
 			EmitEndTag(_openTagStack.Pop());
@@ -218,14 +215,13 @@ public ref partial struct HtmlReader
 			return false;
 		}
 
-		var name = _data.Slice(nameStart, cursor - nameStart);
+		var name = _data[nameStart..cursor];
 		var matchIndex = FindOpenTag(name);
 		if (matchIndex < 0)
 		{
 			_position = FindMarkupNextPosition(cursor);
 			return false;
 		}
-
 		if (matchIndex < _openTagStack.Length - 1)
 		{
 			EmitEndTag(_openTagStack.Pop());
@@ -287,132 +283,37 @@ public ref partial struct HtmlReader
 
 	private readonly int FindMarkupEnd(int cursor)
 	{
-		var quote = '\0';
+		var data = _data;
 		while (cursor < _data.Length)
 		{
-			var value = _data[cursor];
-			if (quote != '\0')
+			var hit = data[cursor..].IndexOfAny(_markupEndCandidates);
+			if (hit < 0)
 			{
-				if (value == quote)
-				{
-					quote = '\0';
-				}
-
-				cursor++;
-				continue;
+				return data.Length;
 			}
-
-			if (value is '"' or '\'')
-			{
-				quote = value;
-				cursor++;
-				continue;
-			}
-
-			if (value == '>')
+			cursor += hit;
+			if (data[cursor] == '>')
 			{
 				return cursor;
 			}
 
-			cursor++;
+			var quote = data[cursor++];
+			var quoteEnd = data[cursor..].IndexOf(quote);
+			if (quoteEnd < 0)
+			{
+				return data.Length;
+			}
+
+			cursor += quoteEnd + 1;
 		}
 
-		return _data.Length;
+		return data.Length;
 	}
 
 	private readonly int FindMarkupNextPosition(int cursor)
 	{
 		var tagEnd = FindMarkupEnd(cursor);
 		return tagEnd < _data.Length && _data[tagEnd] == '>' ? tagEnd + 1 : _data.Length;
-	}
-
-	private static bool TryReadAttribute(ReadOnlySpan<char> data, int cursor, out int nextCursor, out HtmlAttribute attribute)
-	{
-		cursor = SkipWhitespace(data, cursor);
-		while (cursor < data.Length && !IsAttributeNameStart(data[cursor]))
-		{
-			cursor++;
-			cursor = SkipWhitespace(data, cursor);
-		}
-
-		if (cursor >= data.Length)
-		{
-			nextCursor = data.Length;
-			attribute = default;
-			return false;
-		}
-
-		var nameStart = cursor;
-		cursor++;
-		while (cursor < data.Length && IsAttributeNameChar(data[cursor]))
-		{
-			cursor++;
-		}
-
-		var nameLength = cursor - nameStart;
-		cursor = SkipWhitespace(data, cursor);
-		if (cursor < data.Length && data[cursor] == '=')
-		{
-			cursor++;
-			cursor = SkipWhitespace(data, cursor);
-			ReadAttributeValue(data, cursor, out nextCursor, out var valueStart, out var valueLength);
-			attribute = new HtmlAttribute(data.Slice(nameStart, nameLength), data.Slice(valueStart, valueLength));
-			return true;
-		}
-
-		nextCursor = cursor;
-		attribute = new HtmlAttribute(data.Slice(nameStart, nameLength), default);
-		return true;
-	}
-
-	private static void ReadAttributeValue(scoped ReadOnlySpan<char> data, int cursor, out int nextCursor, out int valueStart, out int valueLength)
-	{
-		if (cursor >= data.Length)
-		{
-			nextCursor = data.Length;
-			valueStart = data.Length;
-			valueLength = 0;
-			return;
-		}
-
-		var quote = data[cursor];
-		if (quote is '"' or '\'')
-		{
-			valueStart = cursor + 1;
-			cursor = valueStart;
-			while (cursor < data.Length && data[cursor] != quote)
-			{
-				cursor++;
-			}
-
-			valueLength = cursor - valueStart;
-			if (cursor < data.Length)
-			{
-				cursor++;
-			}
-			nextCursor = cursor;
-			return;
-		}
-
-		var terminatorIndex = data.Slice(cursor).IndexOfAny(_unquotedAttributeTerminators);
-		if (terminatorIndex < 0)
-		{
-			valueStart = cursor;
-			valueLength = data.Length - cursor;
-			nextCursor = data.Length;
-			return;
-		}
-
-		var end = cursor + terminatorIndex;
-		valueStart = cursor;
-		valueLength = end - cursor;
-		nextCursor = end;
-	}
-
-	private static int SkipWhitespace(scoped ReadOnlySpan<char> data, int cursor)
-	{
-		var index = data[cursor..].IndexOfAnyExcept(_htmlWhitespace);
-		return index >= 0 ? cursor + index : data.Length;
 	}
 
 	private static bool ShouldImplicitlyClose(scoped ReadOnlySpan<char> openTag, scoped ReadOnlySpan<char> nextTag)
@@ -455,11 +356,13 @@ public ref partial struct HtmlReader
 		};
 	}
 
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private static bool NamesEqual(scoped ReadOnlySpan<char> left, scoped ReadOnlySpan<char> right)
 	{
 		return left.Equals(right, StringComparison.OrdinalIgnoreCase);
 	}
 
+	[MethodImpl(MethodImplOptions.AggressiveInlining)]
 	private static bool EqualsAsciiIgnoreCase(scoped ReadOnlySpan<char> left, scoped ReadOnlySpan<char> right)
 	{
 		return left.Equals(right, StringComparison.OrdinalIgnoreCase);
@@ -475,18 +378,6 @@ public ref partial struct HtmlReader
 	private static bool IsTagNameChar(char value)
 	{
 		return IsTagNameStart(value) || value is >= '0' and <= '9' or ':' or '-' or '_';
-	}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private static bool IsAttributeNameStart(char value)
-	{
-		return value is not ('"' or '\'' or '=' or '<' or '>' or '/' or '`') && !IsHtmlWhitespace(value);
-	}
-
-	[MethodImpl(MethodImplOptions.AggressiveInlining)]
-	private static bool IsAttributeNameChar(char value)
-	{
-		return value is not ('"' or '\'' or '=' or '<' or '>' or '/' or '`') && !IsHtmlWhitespace(value);
 	}
 
 	[MethodImpl(MethodImplOptions.AggressiveInlining)]

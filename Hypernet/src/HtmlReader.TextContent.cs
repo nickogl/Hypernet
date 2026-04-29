@@ -105,7 +105,7 @@ public ref partial struct HtmlReader
 			}
 		}
 
-		return _data.Slice(destinationStart, destinationCursor - destinationStart);
+		return _data[destinationStart..destinationCursor];
 	}
 
 	/// <summary>

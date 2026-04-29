@@ -10,10 +10,10 @@ public abstract class BenchmarkBase
 	protected const int BodyExcerptLength = 5_000;
 
 	[Params(
-		// "wikipedia_article_html_parser.html",
-		// "mdn_using_fetch.html",
-		// "github_dotnet_docker_repo.html",
-		// "reuters_technology_article.html",
+		"wikipedia_article_html_parser.html",
+		"mdn_using_fetch.html",
+		"github_dotnet_docker_repo.html",
+		"reuters_technology_article.html",
 		"stackoverflow_htmlagilitypack_question.html")]
 	public string FileName { get; set; } = "";
 
