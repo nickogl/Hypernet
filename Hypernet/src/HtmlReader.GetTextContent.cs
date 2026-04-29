@@ -22,7 +22,9 @@ public ref partial struct HtmlReader
 	/// provided HTML content's lifetime. Materialize it as a string if you need to persist it after
 	/// disposing of the HTML content.
 	/// </returns>
-	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.StartTag" />.</exception>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is not <see cref="HtmlToken.StartTag" />.
+	/// </exception>
 	public ReadOnlySpan<char> GetDangerousTextContent(HtmlTextContentOptions options = HtmlTextContentOptions.None)
 	{
 		ThrowIfUnexpectedEntity(HtmlToken.StartTag);
@@ -112,7 +114,7 @@ public ref partial struct HtmlReader
 	/// <remarks>
 	/// Use this when truncated text is acceptable and you want to avoid some runtime overhead that comes
 	/// with mutating the content in-place. The method still consumes the full subtree and leaves the reader
-	/// on the matching, regardless of the result of this function.
+	/// on the matching end tag, regardless of the result of this function.
 	/// </remarks>
 	/// <param name="destination">Receives the extracted text content.</param>
 	/// <param name="charsWritten">Receives the number of characters written to <paramref name="destination" />.</param>
@@ -120,7 +122,9 @@ public ref partial struct HtmlReader
 	/// <see langword="true" /> when the entire text content fit in <paramref name="destination" />,
 	/// <see langword="false" /> when the destination was exhausted and the result was truncated.
 	/// </returns>
-	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.StartTag" />.</exception>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is not <see cref="HtmlToken.StartTag" />.
+	/// </exception>
 	public bool TryGetTextContent(scoped Span<char> destination, out int charsWritten)
 	{
 		return TryGetTextContent(destination, HtmlTextContentOptions.None, out charsWritten);
@@ -133,7 +137,7 @@ public ref partial struct HtmlReader
 	/// Use this when truncated text is acceptable and you want to avoid some runtime overhead that comes
 	/// with mutating the content in-place. This overload supports the same inclusion and whitespace options
 	/// as <see cref="GetDangerousTextContent(HtmlTextContentOptions)" />. The method still consumes the full subtree
-	/// and leaves the reader on the matching, regardless of the result of this function.
+	/// and leaves the reader on the matching end tag, regardless of the result of this function.
 	/// </remarks>
 	/// <param name="destination">Receives the extracted text content.</param>
 	/// <param name="options">Controls which textual sources are included and whether whitespace is normalized.</param>
@@ -142,7 +146,9 @@ public ref partial struct HtmlReader
 	/// <see langword="true" /> when the entire text content fit in <paramref name="destination" />,
 	/// <see langword="false" /> when the destination was exhausted and the result was truncated.
 	/// </returns>
-	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.StartTag" />.</exception>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is not <see cref="HtmlToken.StartTag" />.
+	/// </exception>
 	public bool TryGetTextContent(scoped Span<char> destination, HtmlTextContentOptions options, out int charsWritten)
 	{
 		ThrowIfUnexpectedEntity(HtmlToken.StartTag);

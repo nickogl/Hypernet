@@ -7,11 +7,27 @@ using System.Text;
 
 namespace Hypernet;
 
+/// <summary>
+/// Represents buffered HTML content that can be consumed by <see cref="HtmlReader"/>.
+/// </summary>
 public readonly ref struct HtmlContent : IDisposable
 {
 	private readonly static HtmlContentOptions _defaultOptions = new();
 	private readonly Input _input;
+
+	/// <summary>
+	/// Gets a span over the buffered HTML text.
+	/// </summary>
+	/// <remarks>The returned span remains valid until this instance is disposed.</remarks>
 	public readonly Span<char> Span => _input.Buffer.AsSpan(0, _input.Length);
+
+	/// <summary>
+	/// Gets a value indicating whether the buffered content was truncated during creation.
+	/// </summary>
+	/// <remarks>
+	/// Truncation can happen when the configured buffer limits are exceeded. <see cref="HtmlReader"/>
+	/// can deal with such content and will implicitly emit closing tags upon end of document.
+	/// </remarks>
 	public readonly bool IsTruncated => _input.IsTruncated;
 
 	internal HtmlContent(Input input)
@@ -19,6 +35,9 @@ public readonly ref struct HtmlContent : IDisposable
 		_input = input;
 	}
 
+	/// <summary>
+	/// Releases owned resources and invalidates all previously returned spans.
+	/// </summary>
 	public void Dispose()
 	{
 		_input.Options.TextBufferPool.Return(_input.Buffer);

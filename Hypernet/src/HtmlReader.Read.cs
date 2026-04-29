@@ -13,7 +13,10 @@ public ref partial struct HtmlReader
 	/// <summary>
 	/// Advances the reader to the next logical HTML token.
 	/// </summary>
-	/// <returns>The outcome of the read operation.</returns>
+	/// <returns>
+	/// <see langword="true" /> if the reader has more tokens after this, or
+	/// <see langword="false" /> if the end of the document was reached.
+	/// </returns>
 	public bool Read()
 	{
 		EnsureOpenTagStack();

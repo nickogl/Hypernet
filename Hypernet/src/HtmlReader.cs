@@ -57,7 +57,10 @@ public ref partial struct HtmlReader : IDisposable
 	/// <summary>
 	/// Gets the tag name for the current <see cref="HtmlToken.StartTag" /> or <see cref="HtmlToken.EndTag" /> token.
 	/// </summary>
-	/// <exception cref="InvalidOperationException">Thrown when the current token is neither <see cref="HtmlToken.StartTag" /> nor <see cref="HtmlToken.EndTag" />.</exception>
+	/// <remarks>The returned span remains valid as long as the span initially passed to the reader is valid.</remarks>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is neither <see cref="HtmlToken.StartTag" /> nor <see cref="HtmlToken.EndTag" />.
+	/// </exception>
 	public readonly ReadOnlySpan<char> TagName
 	{
 		get
@@ -74,7 +77,13 @@ public ref partial struct HtmlReader : IDisposable
 	/// <summary>
 	/// Gets a zero-allocation enumerable view over the current start tag's attributes.
 	/// </summary>
-	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.StartTag" />.</exception>
+	/// <remarks>
+	/// The returned attribute's name and value spans remain valid as long as the span initially
+	/// passed to the reader is valid.
+	/// </remarks>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is not <see cref="HtmlToken.StartTag" />.
+	/// </exception>
 	public readonly AttributeEnumerable Attributes
 	{
 		get
@@ -88,7 +97,18 @@ public ref partial struct HtmlReader : IDisposable
 	/// <summary>
 	/// Gets the payload for the current <see cref="HtmlToken.Text" /> token.
 	/// </summary>
-	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.Text" />.</exception>
+	/// <remarks>
+	/// <para>
+	/// This only returns text up to the last tag's closing tag or the next opening tag. To get text for
+	/// the whole subtree, use <see cref="TryGetTextContent"/> or <see cref="GetDangerousTextContent"/>.
+	/// </para>
+	/// <para>
+	/// The returned span remains valid as long as the span initially passed to the reader is valid.
+	/// </para>
+	/// </remarks>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is not <see cref="HtmlToken.Text" />.
+	/// </exception>
 	public readonly ReadOnlySpan<char> Text
 	{
 		get
@@ -102,7 +122,10 @@ public ref partial struct HtmlReader : IDisposable
 	/// <summary>
 	/// Gets the payload for the current <see cref="HtmlToken.Comment" /> token.
 	/// </summary>
-	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.Comment" />.</exception>
+	/// <remarks>The returned span remains valid as long as the span initially passed to the reader is valid.</remarks>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is not <see cref="HtmlToken.Comment" />.
+	/// </exception>
 	public readonly ReadOnlySpan<char> Comment
 	{
 		get
@@ -113,6 +136,16 @@ public ref partial struct HtmlReader : IDisposable
 		}
 	}
 
+	/// <summary>
+	/// Creates an HTML reader over mutable buffered content.
+	/// </summary>
+	/// <param name="data">The HTML buffer to read from.</param>
+	/// <param name="options">Optional reader configuration.</param>
+	/// <remarks>
+	/// The reader may rewrite the underlying buffer during some operations, but
+	/// this is explicit through appropriately named methods. Returned spans remain
+	/// valid only while the underlying buffer remains valid.
+	/// </remarks>
 	public HtmlReader(Span<char> data, HtmlReaderOptions? options = default)
 	{
 		options ??= _defaultOptions;
@@ -136,10 +169,13 @@ public ref partial struct HtmlReader : IDisposable
 	/// <summary>
 	/// Tries to get the value of a named attribute from the current start tag.
 	/// </summary>
+	/// <remarks>The returned span remains valid as long as the span initially passed to the reader is valid.</remarks>
 	/// <param name="name">The attribute name to search for.</param>
 	/// <param name="value">Receives the attribute value when found.</param>
 	/// <returns><see langword="true" /> when a matching attribute is found; otherwise, <see langword="false" />.</returns>
-	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.StartTag" />.</exception>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is not <see cref="HtmlToken.StartTag" />.
+	/// </exception>
 	public readonly bool TryGetAttribute(ReadOnlySpan<char> name, out ReadOnlySpan<char> value)
 	{
 		ThrowIfUnexpectedEntity(HtmlToken.StartTag);
@@ -161,7 +197,9 @@ public ref partial struct HtmlReader : IDisposable
 	/// Exposes mutable access to the current text node when the current token is text.
 	/// </summary>
 	/// <returns>A mutable span over the current text node.</returns>
-	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.Text" />.</exception>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is not <see cref="HtmlToken.Text" />.
+	/// </exception>
 	public readonly Span<char> GetDangerousMutableTextNode()
 	{
 		ThrowIfUnexpectedEntity(HtmlToken.Text);
@@ -173,7 +211,9 @@ public ref partial struct HtmlReader : IDisposable
 	/// Exposes mutable access to the current comment when the current token is a comment.
 	/// </summary>
 	/// <returns>A mutable span over the current comment.</returns>
-	/// <exception cref="InvalidOperationException">Thrown when the current token is not <see cref="HtmlToken.Comment" />.</exception>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is not <see cref="HtmlToken.Comment" />.
+	/// </exception>
 	public readonly Span<char> GetDangerousMutableComment()
 	{
 		ThrowIfUnexpectedEntity(HtmlToken.Comment);
