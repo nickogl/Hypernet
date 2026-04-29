@@ -1,7 +1,7 @@
 namespace Hypernet;
 
 /// <summary>
-/// Controls how <c>GetTextContent</c>-style APIs extract text from HTML subtrees.
+/// Controls how <c>GetDangerousTextContent</c>-style APIs extract text from HTML subtrees.
 /// </summary>
 [Flags]
 public enum HtmlTextContentOptions

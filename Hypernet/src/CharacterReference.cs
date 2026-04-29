@@ -5,7 +5,7 @@ namespace Hypernet;
 
 internal static class CharacterReference
 {
-	public static bool TryDecode(ReadOnlySpan<char> entity, Span<char> destination, out int charsWritten)
+	public static bool TryDecode(scoped ReadOnlySpan<char> entity, Span<char> destination, out int charsWritten)
 	{
 		if (_valueByEntitySpan.TryGetValue(entity, out var namedValue))
 		{
@@ -22,7 +22,7 @@ internal static class CharacterReference
 		return TryDecodeNumeric(entity, destination, out charsWritten);
 	}
 
-	private static bool TryDecodeNumeric(ReadOnlySpan<char> entity, Span<char> destination, out int charsWritten)
+	private static bool TryDecodeNumeric(scoped ReadOnlySpan<char> entity, Span<char> destination, out int charsWritten)
 	{
 		if (entity.Length < 4 || entity[0] != '&' || entity[1] != '#' || entity[^1] != ';')
 		{

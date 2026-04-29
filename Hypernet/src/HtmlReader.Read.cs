@@ -362,7 +362,7 @@ public ref partial struct HtmlReader
 		return true;
 	}
 
-	private static void ReadAttributeValue(ReadOnlySpan<char> data, int cursor, out int nextCursor, out int valueStart, out int valueLength)
+	private static void ReadAttributeValue(scoped ReadOnlySpan<char> data, int cursor, out int nextCursor, out int valueStart, out int valueLength)
 	{
 		if (cursor >= data.Length)
 		{
@@ -406,13 +406,13 @@ public ref partial struct HtmlReader
 		nextCursor = end;
 	}
 
-	private static int SkipWhitespace(ReadOnlySpan<char> data, int cursor)
+	private static int SkipWhitespace(scoped ReadOnlySpan<char> data, int cursor)
 	{
 		var index = data[cursor..].IndexOfAnyExcept(_htmlWhitespace);
 		return index >= 0 ? cursor + index : data.Length;
 	}
 
-	private static bool ShouldImplicitlyClose(ReadOnlySpan<char> openTag, ReadOnlySpan<char> nextTag)
+	private static bool ShouldImplicitlyClose(scoped ReadOnlySpan<char> openTag, scoped ReadOnlySpan<char> nextTag)
 	{
 		if (IsHeading(openTag))
 		{
@@ -422,7 +422,7 @@ public ref partial struct HtmlReader
 		return NamesEqual(openTag, nextTag) && IsImplicitCloseTag(nextTag);
 	}
 
-	private static bool IsImplicitCloseTag(ReadOnlySpan<char> name)
+	private static bool IsImplicitCloseTag(scoped ReadOnlySpan<char> name)
 	{
 		return name.Length switch
 		{
@@ -432,14 +432,14 @@ public ref partial struct HtmlReader
 		};
 	}
 
-	private static bool IsHeading(ReadOnlySpan<char> name)
+	private static bool IsHeading(scoped ReadOnlySpan<char> name)
 	{
 		return name.Length == 2
 			&& (name[0] is 'h' or 'H')
 			&& name[1] is >= '1' and <= '6';
 	}
 
-	private static bool IsVoidElement(ReadOnlySpan<char> name)
+	private static bool IsVoidElement(scoped ReadOnlySpan<char> name)
 	{
 		return name.Length switch
 		{
@@ -452,12 +452,12 @@ public ref partial struct HtmlReader
 		};
 	}
 
-	private static bool NamesEqual(ReadOnlySpan<char> left, ReadOnlySpan<char> right)
+	private static bool NamesEqual(scoped ReadOnlySpan<char> left, scoped ReadOnlySpan<char> right)
 	{
 		return left.Equals(right, StringComparison.OrdinalIgnoreCase);
 	}
 
-	private static bool EqualsAsciiIgnoreCase(ReadOnlySpan<char> left, ReadOnlySpan<char> right)
+	private static bool EqualsAsciiIgnoreCase(scoped ReadOnlySpan<char> left, scoped ReadOnlySpan<char> right)
 	{
 		return left.Equals(right, StringComparison.OrdinalIgnoreCase);
 	}

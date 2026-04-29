@@ -30,7 +30,7 @@ public readonly ref struct HtmlContent : IDisposable
 	/// <param name="data">The HTML source to read.</param>
 	/// <param name="options">Optional content configuration.</param>
 	/// <returns>HTML content for use in <see cref="HtmlReader"/>.</returns>
-	public static HtmlContent Create(ReadOnlySpan<char> data, HtmlContentOptions? options = default)
+	public static HtmlContent Create(scoped ReadOnlySpan<char> data, HtmlContentOptions? options = default)
 	{
 		options ??= _defaultOptions;
 		ThrowIfOptionsInvalid(options);
