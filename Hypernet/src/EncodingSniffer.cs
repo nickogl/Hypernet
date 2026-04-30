@@ -43,6 +43,8 @@ internal struct EncodingSniffer
 
 	private void Append(ReadOnlySpan<byte> data)
 	{
+		// Keep a lowercase ASCII prescan for charset detection, but preserve the
+		// first three raw bytes separately so BOM detection can still see them.
 		for (var i = 0; i < data.Length; i++)
 		{
 			var value = data[i];

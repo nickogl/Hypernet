@@ -44,6 +44,9 @@ public ref partial struct HtmlReader
 			? targetDepth
 			: -1;
 
+		// Segments are stored as source-relative slices first because the method rewrites
+		// the same buffer it is reading from, which could corrupt the open tag stack. Most
+		// documents will not pool any memory for this, so this is still fairly cheap.
 		Span<TextSegment> inlineSegmentStorage = stackalloc TextSegment[_options.InitialTextContentSegmentSize];
 		using var segments = new ScratchBuffer<TextSegment>(inlineSegmentStorage);
 		while (Read())

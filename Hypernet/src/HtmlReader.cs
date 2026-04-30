@@ -33,6 +33,7 @@ public ref partial struct HtmlReader : IDisposable
 	private int _depth;
 	private Span<char> _currentData;
 
+	// NOTE: 64 items should cover most pages; increase if it turns out not to
 	private OpenTagStackInlineStorage _openTagStackInlineStorage;
 	private ScratchBuffer<OpenTagStackItem> _openTagStack;
 #if DEBUG

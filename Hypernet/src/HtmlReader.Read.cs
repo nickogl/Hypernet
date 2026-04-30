@@ -154,6 +154,7 @@ public ref partial struct HtmlReader
 			return false;
 		}
 
+		// HTML tree-recovery for unclosed h1-h6/p/li/dt/dd tags, which are allowed
 		var nameEnd = cursor;
 		var name = _data[nameStart..nameEnd];
 		if (_openTagStack.Length > 0 && ShouldImplicitlyClose(GetOpenTagName(_openTagStack.Length - 1), name))
@@ -224,6 +225,7 @@ public ref partial struct HtmlReader
 		}
 		if (matchIndex < _openTagStack.Length - 1)
 		{
+			// Recovery for misnested markup
 			EmitEndTag(_openTagStack.Pop());
 			return true;
 		}
