@@ -28,6 +28,7 @@ public ref partial struct HtmlReader
 	public ReadOnlySpan<char> GetDangerousTextContent(HtmlTextContentOptions options = HtmlTextContentOptions.None)
 	{
 		ThrowIfUnexpectedEntity(HtmlToken.StartTag);
+
 		if (!IsPersistentStartTag())
 		{
 			SetCurrentEntity(HtmlToken.EndTag, _depth - 1, _currentData);
@@ -155,6 +156,7 @@ public ref partial struct HtmlReader
 	public bool TryGetTextContent(scoped Span<char> destination, HtmlTextContentOptions options, out int charsWritten)
 	{
 		ThrowIfUnexpectedEntity(HtmlToken.StartTag);
+
 		if (!IsPersistentStartTag())
 		{
 			SetCurrentEntity(HtmlToken.EndTag, _depth - 1, _currentData);
@@ -203,6 +205,82 @@ public ref partial struct HtmlReader
 
 		charsWritten = destinationCursor;
 		return !truncated;
+	}
+
+	/// <summary>
+	/// Tries to get the current element subtree's extracted text content without advancing the reader.
+	/// </summary>
+	/// <remarks>
+	/// This overload preserves the reader state by snapshotting and restoring the current traversal state
+	/// after the extraction completes. Use this when you need the text content and still want to inspect the
+	/// same subtree again with the reader.
+	/// </remarks>
+	/// <param name="destination">Receives the extracted text content.</param>
+	/// <param name="charsWritten">Receives the number of characters written to <paramref name="destination" />.</param>
+	/// <returns>
+	/// <see langword="true" /> when the entire text content fit in <paramref name="destination" />,
+	/// <see langword="false" /> when the destination was exhausted and the result was truncated.
+	/// </returns>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is not <see cref="HtmlToken.StartTag" />.
+	/// </exception>
+	public bool TryPeekTextContent(scoped Span<char> destination, out int charsWritten)
+	{
+		return TryPeekTextContent(destination, HtmlTextContentOptions.None, out charsWritten);
+	}
+
+	/// <summary>
+	/// Tries to get the current element subtree's extracted text content without advancing the reader.
+	/// </summary>
+	/// <remarks>
+	/// This overload preserves the reader state by snapshotting and restoring the current traversal state
+	/// after the extraction completes. Use this when you need the text content and still want to inspect the
+	/// same subtree again with the reader. This overload supports the same inclusion and whitespace options
+	/// as <see cref="GetDangerousTextContent(HtmlTextContentOptions)" />.
+	/// </remarks>
+	/// <param name="destination">Receives the extracted text content.</param>
+	/// <param name="options">Controls which textual sources are included and whether whitespace is normalized.</param>
+	/// <param name="charsWritten">Receives the number of characters written to <paramref name="destination" />.</param>
+	/// <returns>
+	/// <see langword="true" /> when the entire text content fit in <paramref name="destination" />,
+	/// <see langword="false" /> when the destination was exhausted and the result was truncated.
+	/// </returns>
+	/// <exception cref="InvalidOperationException">
+	/// Thrown when the current token is not <see cref="HtmlToken.StartTag" />.
+	/// </exception>
+	public bool TryPeekTextContent(scoped Span<char> destination, HtmlTextContentOptions options, out int charsWritten)
+	{
+		ThrowIfUnexpectedEntity(HtmlToken.StartTag);
+
+		if (!IsPersistentStartTag())
+		{
+			charsWritten = 0;
+			return true;
+		}
+
+		var peekReader = new HtmlReader(_data, _options)
+		{
+			_token = HtmlToken.StartTag,
+			_position = _position,
+			_attributeStart = _attributeStart,
+			_attributeEnd = _attributeEnd,
+			_depth = 1,
+			_currentData = _currentData,
+		};
+		peekReader.EnsureOpenTagStack();
+		peekReader._openTagStack.Push(_openTagStack[^1]);
+		try
+		{
+			// If nesting is deep, the open tag stack may fall back to pooled memory,
+			// so we need to dispose of the reader to return the rented memory. However,
+			// we cannot use a "using" declaration because it marks the local as readonly,
+			// creating a defensive copy when we mutate the open tag stack.
+			return peekReader.TryGetTextContent(destination, options, out charsWritten);
+		}
+		finally
+		{
+			peekReader.Dispose();
+		}
 	}
 
 	private readonly bool IsPersistentStartTag()

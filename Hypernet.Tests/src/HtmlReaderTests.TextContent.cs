@@ -388,4 +388,60 @@ public sealed partial class HtmlReaderTests
 		Assert.Equal(HtmlToken.EndTag, reader.Token);
 		Assert.Equal("div", reader.TagName.ToString());
 	}
+
+	[Fact]
+	public void TryPeekTextContent_PreservesReaderState()
+	{
+		using var content = HtmlContent.Create("<div class=\"card\">Hello <span class=\"emphasis\">world</span>!</div><p>next</p>");
+		var reader = new HtmlReader(content.Span);
+
+		AssertStartTag(ref reader, "div", 1);
+
+		Span<char> destination = stackalloc char[16];
+		Assert.True(reader.TryPeekTextContent(destination, out var charsWritten));
+		Assert.Equal("Hello world!", destination[..charsWritten].ToString());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
+		Assert.Equal("div", reader.TagName);
+		Assert.Equal(1, reader.Depth);
+
+		Assert.True(reader.TryGetTextContent(destination, out var consumedCharsWritten));
+		Assert.Equal(charsWritten, consumedCharsWritten);
+		Assert.Equal("Hello world!", destination[..consumedCharsWritten].ToString());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
+		Assert.Equal("div", reader.TagName);
+		Assert.Equal(0, reader.Depth);
+
+		AssertStartTag(ref reader, "p", 1);
+		AssertText(ref reader, "next", 1);
+		AssertEndTag(ref reader, "p", 0);
+		Assert.False(reader.Read());
+	}
+
+	[Fact]
+	public void TryPeekTextContent_RestoresReaderState_WhenDestinationIsTooSmall()
+	{
+		using var content = HtmlContent.Create("<div>Hello world!</div><p>next</p>");
+		var reader = new HtmlReader(content.Span);
+
+		AssertStartTag(ref reader, "div", 1);
+
+		Span<char> destination = stackalloc char[5];
+		Assert.False(reader.TryPeekTextContent(destination, out var charsWritten));
+		Assert.Equal("Hello", destination[..charsWritten].ToString());
+		Assert.Equal(HtmlToken.StartTag, reader.Token);
+		Assert.Equal("div", reader.TagName);
+		Assert.Equal(1, reader.Depth);
+
+		Span<char> fullDestination = stackalloc char[16];
+		Assert.True(reader.TryGetTextContent(fullDestination, out var fullCharsWritten));
+		Assert.Equal("Hello world!", fullDestination[..fullCharsWritten].ToString());
+		Assert.Equal(HtmlToken.EndTag, reader.Token);
+		Assert.Equal("div", reader.TagName);
+		Assert.Equal(0, reader.Depth);
+
+		AssertStartTag(ref reader, "p", 1);
+		AssertText(ref reader, "next", 1);
+		AssertEndTag(ref reader, "p", 0);
+		Assert.False(reader.Read());
+	}
 }
