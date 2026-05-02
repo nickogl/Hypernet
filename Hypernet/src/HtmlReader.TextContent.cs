@@ -35,15 +35,8 @@ public ref partial struct HtmlReader
 			return default;
 		}
 
-		var includeComments = (options & HtmlTextContentOptions.IncludeComments) != 0;
-		var includeNonContentText = (options & HtmlTextContentOptions.IncludeNonContentText) != 0;
-		var normalizeWhitespace = (options & HtmlTextContentOptions.NormalizeWhitespace) != 0;
-		var keepUnknownEntities = (options & HtmlTextContentOptions.KeepUnknownEntities) != 0;
-		var targetDepth = _depth - 1;
+		var traversalState = new TextTraversalState(options, _depth - 1, IsNonContentTag(_currentData));
 		var destinationStart = _position;
-		var ignoredDepth = !includeNonContentText && IsNonContentTag(_currentData)
-			? targetDepth
-			: -1;
 
 		// Segments are stored as source-relative slices first because the method rewrites
 		// the same buffer it is reading from, which could corrupt the open tag stack. Most
@@ -52,32 +45,15 @@ public ref partial struct HtmlReader
 		using var segments = new ScratchBuffer<TextSegment>(inlineSegmentStorage);
 		while (Read())
 		{
-			if (ignoredDepth < 0 && _token == HtmlToken.StartTag && !includeNonContentText && IsNonContentTag(_currentData))
+			if (traversalState.ShouldCapture(_token))
 			{
-				ignoredDepth = _depth - 1;
-			}
-			else if (ignoredDepth < 0)
-			{
-				if (_token == HtmlToken.Text || _token == HtmlToken.Comment && includeComments)
+				if (TryCaptureCurrentTokenAsSegment(ref traversalState, out var segment))
 				{
-					var leadingWhitespace = false;
-					var trailingWhitespace = false;
-					var written = normalizeWhitespace
-						? RewriteContentNormalized(_currentData, _currentData, keepUnknownEntities, out leadingWhitespace, out trailingWhitespace)
-						: RewriteContentInPlace(_currentData, _currentData, keepUnknownEntities);
-					if ((written > 0 || leadingWhitespace) && _data.Overlaps(_currentData, out var offset))
-					{
-						segments.Push(new TextSegment(offset, written, leadingWhitespace, trailingWhitespace), _options.MaxTextContentSegmentSize);
-					}
+					segments.Push(segment, _options.MaxTextContentSegmentSize);
 				}
 			}
 
-			if (_token == HtmlToken.EndTag && _depth == ignoredDepth)
-			{
-				ignoredDepth = -1;
-			}
-
-			if (_token == HtmlToken.EndTag && _depth == targetDepth)
+			if (ShouldStopTraversal(ref traversalState, _token, _currentData, _depth))
 			{
 				break;
 			}
@@ -164,46 +140,24 @@ public ref partial struct HtmlReader
 			return true;
 		}
 
-		var includeComments = (options & HtmlTextContentOptions.IncludeComments) != 0;
-		var includeNonContentText = (options & HtmlTextContentOptions.IncludeNonContentText) != 0;
-		var normalizeWhitespace = (options & HtmlTextContentOptions.NormalizeWhitespace) != 0;
-		var keepUnknownEntities = (options & HtmlTextContentOptions.KeepUnknownEntities) != 0;
-		var targetDepth = _depth - 1;
-		var destinationCursor = 0;
-		var ignoredDepth = !includeNonContentText && IsNonContentTag(_currentData)
-			? targetDepth
-			: -1;
-		var pendingWhitespace = false;
-		var hasOutput = false;
+		var traversalState = new TextTraversalState(options, _depth - 1, IsNonContentTag(_currentData));
+		var rewriteState = new TextRewriteState(traversalState.NormalizeWhitespace);
 		var truncated = false;
-
 		while (Read())
 		{
-			if (!truncated && ignoredDepth < 0 && _token == HtmlToken.StartTag && !includeNonContentText && IsNonContentTag(_currentData))
+			if (!truncated && traversalState.ShouldCapture(_token))
 			{
-				ignoredDepth = _depth - 1;
-			}
-			else if (!truncated && ignoredDepth < 0 && (_token == HtmlToken.Text || _token == HtmlToken.Comment && includeComments))
-			{
-				var written = 0;
-				var leadingWhitespace = false;
-				var completed = TryRewriteContent(_currentData, destination[destinationCursor..], keepUnknownEntities, normalizeWhitespace, ref written, ref pendingWhitespace, ref hasOutput, ref leadingWhitespace);
-				destinationCursor += written;
+				var completed = TryRewriteContent(_currentData, destination, traversalState.KeepUnknownEntities, ref rewriteState);
 				truncated = !completed;
 			}
 
-			if (_token == HtmlToken.EndTag && _depth == ignoredDepth)
-			{
-				ignoredDepth = -1;
-			}
-
-			if (_token == HtmlToken.EndTag && _depth == targetDepth)
+			if (ShouldStopTraversal(ref traversalState, _token, _currentData, _depth))
 			{
 				break;
 			}
 		}
 
-		charsWritten = destinationCursor;
+		charsWritten = rewriteState.Length;
 		return !truncated;
 	}
 
@@ -290,102 +244,83 @@ public ref partial struct HtmlReader
 			&& GetOpenTagName(_openTagStack.Length - 1).Equals(_currentData, StringComparison.OrdinalIgnoreCase);
 	}
 
-	private static int RewriteContentInPlace(ReadOnlySpan<char> source, Span<char> destination, bool keepUnknownEntities)
+	private static bool ShouldStopTraversal(ref TextTraversalState state, HtmlToken token, ReadOnlySpan<char> tagName, int depth)
 	{
-		var length = 0;
-		var pendingWhitespace = false;
-		var hasOutput = false;
-		var leadingWhitespace = false;
-		TryRewriteContent(source, destination, keepUnknownEntities, normalizeWhitespace: false, ref length, ref pendingWhitespace, ref hasOutput, ref leadingWhitespace);
-		return length;
+		state.Advance(token, tagName, depth, out var shouldStopTraversal);
+		return shouldStopTraversal;
 	}
 
-	private static int RewriteContentNormalized(ReadOnlySpan<char> source, Span<char> destination, bool keepUnknownEntities, out bool leadingWhitespace, out bool trailingWhitespace)
+	private readonly bool TryCaptureCurrentTokenAsSegment(ref TextTraversalState state, out TextSegment segment)
 	{
-		var length = 0;
-		var pendingWhitespace = false;
-		var hasOutput = false;
-		leadingWhitespace = false;
-		TryRewriteContent(source, destination, keepUnknownEntities, normalizeWhitespace: true, ref length, ref pendingWhitespace, ref hasOutput, ref leadingWhitespace);
-		trailingWhitespace = pendingWhitespace;
-		return length;
+		var rewriteState = new TextRewriteState(state.NormalizeWhitespace);
+		_ = TryRewriteContent(_currentData, _currentData, state.KeepUnknownEntities, ref rewriteState);
+		var written = rewriteState.Length;
+		var leadingWhitespace = rewriteState.LeadingWhitespace;
+		if ((written > 0 || leadingWhitespace) && _data.Overlaps(_currentData, out var offset))
+		{
+			segment = new TextSegment(offset, written, leadingWhitespace, rewriteState.TrailingWhitespace);
+			return true;
+		}
+
+		segment = default;
+		return false;
 	}
 
 	private static bool TryRewriteContent(
 		ReadOnlySpan<char> source,
-		Span<char> destination,
+		scoped Span<char> destination,
 		bool keepUnknownEntities,
-		bool normalizeWhitespace,
-		ref int length,
-		ref bool pendingWhitespace,
-		ref bool hasOutput,
-		ref bool leadingWhitespace)
+		scoped ref TextRewriteState state)
 	{
-		Span<char> decodedEntity = stackalloc char[4];
 		var cursor = 0;
-		var tokenStart = normalizeWhitespace ? _normalizedContentTokenStart : _characterReferenceStart;
+		var tokenStart = state.TokenStart;
 		while (cursor < source.Length)
 		{
 			var tokenIndex = FindTokenStart(source, cursor, tokenStart);
 			if (tokenIndex < 0)
 			{
-				if (normalizeWhitespace)
-				{
-					if (!AppendLiteral(source[cursor..], destination, ref length, ref pendingWhitespace))
-					{
-						return false;
-					}
-
-					if (length > 0)
-					{
-						hasOutput = true;
-					}
-
-					return true;
-				}
-
-				return AppendLiteral(source[cursor..], destination, ref length);
-			}
-
-			if (normalizeWhitespace)
-			{
-				if (!AppendLiteral(source[cursor..tokenIndex], destination, ref length, ref pendingWhitespace))
+				if (!state.TryAppendLiteral(source[cursor..], destination))
 				{
 					return false;
 				}
 
+				if (state.Length > 0)
+				{
+					state.MarkHasOutput();
+				}
+
+				return true;
+			}
+
+			if (state.NormalizeWhitespace)
+			{
+				if (!state.TryAppendLiteral(source[cursor..tokenIndex], destination))
+				{
+					return false;
+				}
 				if (tokenIndex > cursor)
 				{
-					hasOutput = true;
+					state.MarkHasOutput();
 				}
 
 				cursor = tokenIndex;
 				if (source[cursor] != '&')
 				{
 					cursor = SkipWhitespaceRun(source, cursor);
-					if (hasOutput)
-					{
-						pendingWhitespace = true;
-					}
-					else
-					{
-						leadingWhitespace = true;
-					}
-
+					state.MarkWhitespaceRun();
 					continue;
 				}
 			}
 			else
 			{
-				if (!AppendLiteral(source[cursor..tokenIndex], destination, ref length))
+				if (!state.TryAppendLiteral(source[cursor..tokenIndex], destination))
 				{
 					return false;
 				}
-
 				cursor = tokenIndex;
 			}
 
-			if (!TryAppendCharacterReference(source, destination, keepUnknownEntities, normalizeWhitespace, ref cursor, ref length, ref pendingWhitespace, ref hasOutput, ref leadingWhitespace, decodedEntity))
+			if (!TryAppendCharacterReference(source, destination, keepUnknownEntities, ref cursor, ref state))
 			{
 				return false;
 			}
@@ -396,75 +331,58 @@ public ref partial struct HtmlReader
 
 	private static bool TryAppendCharacterReference(
 		ReadOnlySpan<char> source,
-		Span<char> destination,
+		scoped Span<char> destination,
 		bool keepUnknownEntities,
-		bool normalizeWhitespace,
 		ref int cursor,
-		ref int length,
-		ref bool pendingWhitespace,
-		ref bool hasOutput,
-		ref bool leadingWhitespace,
-		Span<char> decodedEntity)
+		scoped ref TextRewriteState state)
 	{
 		if (cursor + 1 >= source.Length || !IsReferenceStart(source[cursor + 1]))
 		{
-			if (!AppendLiteral("&", destination, ref length, ref pendingWhitespace))
+			if (!state.TryAppendLiteral("&", destination))
 			{
 				return false;
 			}
-
-			hasOutput = true;
+			state.MarkHasOutput();
 			cursor++;
 			return true;
 		}
 
+		Span<char> decodedEntity = stackalloc char[4];
 		var entityLength = source[cursor..].IndexOf(';');
-		if (entityLength >= 0
-			&& TryDecodeCharacterReference(source, cursor, entityLength, decodedEntity, out var charsWritten))
+		if (entityLength >= 0 && TryDecodeCharacterReference(source, cursor, entityLength, decodedEntity, out var charsWritten))
 		{
-			if (normalizeWhitespace && charsWritten == 1 && IsWhitespaceCharacter(decodedEntity[0]))
+			if (state.NormalizeWhitespace && charsWritten == 1 && IsWhitespaceCharacter(decodedEntity[0]))
 			{
-				if (length > 0)
-				{
-					pendingWhitespace = true;
-				}
-				else
-				{
-					leadingWhitespace = true;
-				}
-
+				state.MarkWhitespaceRun();
 				cursor += entityLength + 1;
 				return true;
 			}
 
-			if (!AppendLiteral(decodedEntity[..charsWritten], destination, ref length, ref pendingWhitespace))
+			if (!state.TryAppendLiteral(decodedEntity[..charsWritten], destination))
 			{
 				return false;
 			}
-
-			hasOutput = true;
+			state.MarkHasOutput();
 			cursor += entityLength + 1;
 			return true;
 		}
 
 		if (keepUnknownEntities && entityLength >= 0)
 		{
-			if (!AppendLiteral(source.Slice(cursor, entityLength + 1), destination, ref length, ref pendingWhitespace))
+			if (!state.TryAppendLiteral(source.Slice(cursor, entityLength + 1), destination))
 			{
 				return false;
 			}
-
-			hasOutput = true;
+			state.MarkHasOutput();
 			cursor += entityLength + 1;
 			return true;
 		}
 
-		if (!AppendLiteral("&", destination, ref length, ref pendingWhitespace))
+		if (!state.TryAppendLiteral("&", destination))
 		{
 			return false;
 		}
-
-		hasOutput = true;
+		state.MarkHasOutput();
 		cursor++;
 		return true;
 	}
@@ -503,42 +421,6 @@ public ref partial struct HtmlReader
 		return true;
 	}
 
-	private static bool AppendLiteral(ReadOnlySpan<char> literal, Span<char> destination, ref int length)
-	{
-		var available = destination.Length - length;
-		if (available <= 0)
-		{
-			return false;
-		}
-
-		var copied = Math.Min(available, literal.Length);
-		literal[..copied].CopyTo(destination[length..]);
-		length += copied;
-		return copied == literal.Length;
-	}
-
-	private static bool AppendLiteral(ReadOnlySpan<char> literal, Span<char> destination, ref int length, ref bool pendingWhitespace)
-	{
-		if (literal.IsEmpty)
-		{
-			return true;
-		}
-
-		if (pendingWhitespace)
-		{
-			if (length >= destination.Length)
-			{
-				return false;
-			}
-
-			destination[length] = ' ';
-			length++;
-			pendingWhitespace = false;
-		}
-
-		return AppendLiteral(literal, destination, ref length);
-	}
-
 	private static bool IsReferenceStart(char value)
 	{
 		return value == '#' || char.IsAsciiLetter(value);
@@ -562,5 +444,127 @@ public ref partial struct HtmlReader
 
 	private readonly record struct TextSegment(int Start, int Length, bool LeadingWhitespace, bool TrailingWhitespace)
 	{
+	}
+
+	private ref struct TextTraversalState
+	{
+		private readonly bool _includeComments;
+		private readonly bool _includeNonContentText;
+		private readonly int _targetDepth;
+		private int _ignoredDepth;
+
+		public TextTraversalState(HtmlTextContentOptions options, int targetDepth, bool startsInIgnoredSubtree)
+		{
+			_includeComments = (options & HtmlTextContentOptions.IncludeComments) != 0;
+			_includeNonContentText = (options & HtmlTextContentOptions.IncludeNonContentText) != 0;
+			NormalizeWhitespace = (options & HtmlTextContentOptions.NormalizeWhitespace) != 0;
+			KeepUnknownEntities = (options & HtmlTextContentOptions.KeepUnknownEntities) != 0;
+			_targetDepth = targetDepth;
+			_ignoredDepth = !_includeNonContentText && startsInIgnoredSubtree
+				? targetDepth
+				: -1;
+		}
+
+		public readonly bool NormalizeWhitespace { get; }
+		public readonly bool KeepUnknownEntities { get; }
+
+		public readonly bool ShouldCapture(HtmlToken token)
+		{
+			return _ignoredDepth < 0
+				&& (token == HtmlToken.Text || token == HtmlToken.Comment && _includeComments);
+		}
+
+		public void Advance(HtmlToken token, ReadOnlySpan<char> tagName, int depth, out bool shouldStopTraversal)
+		{
+			shouldStopTraversal = false;
+
+			if (_ignoredDepth < 0 && !_includeNonContentText && token == HtmlToken.StartTag && IsNonContentTag(tagName))
+			{
+				_ignoredDepth = depth - 1;
+			}
+
+			if (token != HtmlToken.EndTag)
+			{
+				return;
+			}
+
+			if (depth == _ignoredDepth)
+			{
+				_ignoredDepth = -1;
+			}
+
+			shouldStopTraversal = depth == _targetDepth;
+		}
+	}
+
+	private ref struct TextRewriteState
+	{
+		private readonly bool _normalizeWhitespace;
+		private int _length;
+		private bool _pendingWhitespace;
+		private bool _hasOutput;
+		private bool _leadingWhitespace;
+		private readonly SearchValues<char> _tokenStart;
+
+		public TextRewriteState(bool normalizeWhitespace)
+		{
+			_normalizeWhitespace = normalizeWhitespace;
+			_tokenStart = normalizeWhitespace ? _normalizedContentTokenStart : _characterReferenceStart;
+		}
+
+		public readonly int Length => _length;
+		public readonly bool HasOutput => _hasOutput;
+		public readonly bool LeadingWhitespace => _leadingWhitespace;
+		public readonly SearchValues<char> TokenStart => _tokenStart;
+		public readonly bool NormalizeWhitespace => _normalizeWhitespace;
+		public readonly bool TrailingWhitespace => _pendingWhitespace;
+
+		public void MarkHasOutput()
+		{
+			_hasOutput = true;
+		}
+
+		public void MarkWhitespaceRun()
+		{
+			if (_hasOutput)
+			{
+				_pendingWhitespace = true;
+			}
+			else
+			{
+				_leadingWhitespace = true;
+			}
+		}
+
+		public bool TryAppendLiteral(scoped ReadOnlySpan<char> literal, scoped Span<char> destination)
+		{
+			if (literal.IsEmpty)
+			{
+				return true;
+			}
+
+			if (_normalizeWhitespace && _pendingWhitespace)
+			{
+				if (_length >= destination.Length)
+				{
+					return false;
+				}
+
+				destination[_length] = ' ';
+				_length++;
+				_pendingWhitespace = false;
+			}
+
+			var available = destination.Length - _length;
+			if (available <= 0)
+			{
+				return false;
+			}
+
+			var copied = Math.Min(available, literal.Length);
+			literal[..copied].CopyTo(destination[_length..]);
+			_length += copied;
+			return copied == literal.Length;
+		}
 	}
 }

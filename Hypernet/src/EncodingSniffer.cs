@@ -7,7 +7,7 @@ namespace Hypernet;
 internal struct EncodingSniffer
 {
 	private const int PrescanByteLimit = 1024;
-	private const string CharsetPrefix = "charset=";
+	private const string CharsetToken = "charset";
 
 	private PrescanBuffer _prescanBuffer;
 	private int _prescanLength;
@@ -109,15 +109,77 @@ internal struct EncodingSniffer
 		ReadOnlySpan<char> ascii = _prescanBuffer;
 		ascii = ascii[.._prescanLength];
 
-		var charsetIndex = ascii.IndexOf(CharsetPrefix, StringComparison.Ordinal);
-		if (charsetIndex < 0
-			|| !TryGetCharsetValue(ascii, charsetIndex + CharsetPrefix.Length, out var charset))
+		if (!TryFindCharsetValue(ascii, out var charset))
 		{
 			encoding = null;
 			return false;
 		}
 
 		return Charset.TryGetEncoding(charset, out encoding);
+	}
+
+	private static bool TryFindCharsetValue(ReadOnlySpan<char> ascii, out ReadOnlySpan<char> charset)
+	{
+		var searchStart = 0;
+		while (searchStart < ascii.Length)
+		{
+			var tokenIndex = ascii[searchStart..].IndexOf(CharsetToken, StringComparison.Ordinal);
+			if (tokenIndex < 0)
+			{
+				break;
+			}
+
+			tokenIndex += searchStart;
+			var tokenEnd = tokenIndex + CharsetToken.Length;
+			if (!IsCharsetTokenBoundary(ascii, tokenIndex, tokenEnd))
+			{
+				searchStart = tokenIndex + 1;
+				continue;
+			}
+
+			var valueStart = SkipWhitespace(ascii, tokenEnd);
+			if ((uint)valueStart >= (uint)ascii.Length || ascii[valueStart] != '=')
+			{
+				searchStart = tokenIndex + 1;
+				continue;
+			}
+
+			valueStart = SkipWhitespace(ascii, valueStart + 1);
+			if (TryGetCharsetValue(ascii, valueStart, out charset))
+			{
+				return true;
+			}
+
+			searchStart = tokenIndex + 1;
+		}
+
+		charset = default;
+		return false;
+	}
+
+	private static bool IsCharsetTokenBoundary(ReadOnlySpan<char> ascii, int tokenStart, int tokenEnd)
+	{
+		if (tokenStart > 0 && IsAsciiAttributeNameChar(ascii[tokenStart - 1]))
+		{
+			return false;
+		}
+
+		return tokenEnd >= ascii.Length || !IsAsciiAttributeNameChar(ascii[tokenEnd]);
+	}
+
+	private static bool IsAsciiAttributeNameChar(char value)
+	{
+		return value is (>= 'a' and <= 'z') or (>= '0' and <= '9') or '-' or '_' or ':';
+	}
+
+	private static int SkipWhitespace(ReadOnlySpan<char> ascii, int index)
+	{
+		while ((uint)index < (uint)ascii.Length && char.IsWhiteSpace(ascii[index]))
+		{
+			index++;
+		}
+
+		return index;
 	}
 
 	private readonly bool NeedsMoreBomBytes()

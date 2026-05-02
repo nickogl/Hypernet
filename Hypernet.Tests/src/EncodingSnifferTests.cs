@@ -113,6 +113,62 @@ public sealed class EncodingSnifferTests
 	}
 
 	[Fact]
+	public void Append_DetectsCharset_WhenWhitespaceSurroundsEquals()
+	{
+		var sniffer = new EncodingSniffer();
+
+		var result = sniffer.Append(
+			CreateSequence(Encoding.ASCII.GetBytes("<meta charset = \"utf-8\">")),
+			isFinalBlock: true,
+			out var encoding);
+
+		Assert.Equal(EncodingSniffResult.Detected, result);
+		Assert.Equal("utf-8", encoding?.WebName);
+	}
+
+	[Fact]
+	public void Append_DetectsCharset_WhenWhitespaceSurroundsEquals_AndValueIsSingleQuoted()
+	{
+		var sniffer = new EncodingSniffer();
+
+		var result = sniffer.Append(
+			CreateSequence(Encoding.ASCII.GetBytes("<meta charset = 'utf-8'>")),
+			isFinalBlock: true,
+			out var encoding);
+
+		Assert.Equal(EncodingSniffResult.Detected, result);
+		Assert.Equal("utf-8", encoding?.WebName);
+	}
+
+	[Fact]
+	public void Append_DoesNotDetectCharsetInsideLongerAttributeName()
+	{
+		var sniffer = new EncodingSniffer();
+
+		var result = sniffer.Append(
+			CreateSequence(Encoding.ASCII.GetBytes("<meta data-charset=\"utf-8\">")),
+			isFinalBlock: true,
+			out var encoding);
+
+		Assert.Equal(EncodingSniffResult.UseFallback, result);
+		Assert.Null(encoding);
+	}
+
+	[Fact]
+	public void Append_DetectsCharset_WhenFirstTokenIsNotFollowedByEquals()
+	{
+		var sniffer = new EncodingSniffer();
+
+		var result = sniffer.Append(
+			CreateSequence(Encoding.ASCII.GetBytes("<meta name=\"charset\" charset=\"utf-8\">")),
+			isFinalBlock: true,
+			out var encoding);
+
+		Assert.Equal(EncodingSniffResult.Detected, result);
+		Assert.Equal("utf-8", encoding?.WebName);
+	}
+
+	[Fact]
 	public void Append_ReturnsUseFallback_WhenCharsetLabelIsUnknown()
 	{
 		var sniffer = new EncodingSniffer();

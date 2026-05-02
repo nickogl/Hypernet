@@ -42,47 +42,68 @@ public ref partial struct HtmlReader
 				return true;
 			}
 
-			var next = _data[_position + 1];
-			if (next == '/')
+			var markupResult = TryReadMarkupAtCurrentPosition();
+			if (markupResult == MarkupReadResult.ProducedToken)
 			{
-				var position = _position;
-				if (TryReadEndTag())
-				{
-					return true;
-				}
-
-				if (_position != position)
-				{
-					continue;
-				}
-
-				ReadSingleCharacterTextNode();
 				return true;
 			}
-
-			if (next == '!')
-			{
-				if (TryReadComment())
-				{
-					return true;
-				}
-				if (TrySkipBogusMarkup())
-				{
-					continue;
-				}
-			}
-			else if (next == '?' && TrySkipBogusMarkup())
+			if (markupResult == MarkupReadResult.Continue)
 			{
 				continue;
-			}
-			else if (IsTagNameStart(next) && TryReadStartTag())
-			{
-				return true;
 			}
 
 			ReadSingleCharacterTextNode();
 			return true;
 		}
+	}
+
+	private MarkupReadResult TryReadMarkupAtCurrentPosition()
+	{
+		if (_position + 1 >= _data.Length)
+		{
+			// A trailing '<' is not valid markup and should be emitted as text.
+			return MarkupReadResult.EmitCurrentAsText;
+		}
+
+		var next = _data[_position + 1];
+		if (next == '/')
+		{
+			var position = _position;
+			if (TryReadEndTag())
+			{
+				return MarkupReadResult.ProducedToken;
+			}
+
+			return _position != position
+				? MarkupReadResult.Continue
+				: MarkupReadResult.EmitCurrentAsText;
+		}
+
+		if (next == '!')
+		{
+			if (TryReadComment())
+			{
+				return MarkupReadResult.ProducedToken;
+			}
+
+			return TrySkipBogusMarkup()
+				? MarkupReadResult.Continue
+				: MarkupReadResult.EmitCurrentAsText;
+		}
+
+		if (next == '?')
+		{
+			return TrySkipBogusMarkup()
+				? MarkupReadResult.Continue
+				: MarkupReadResult.EmitCurrentAsText;
+		}
+
+		if (IsTagNameStart(next) && TryReadStartTag())
+		{
+			return MarkupReadResult.ProducedToken;
+		}
+
+		return MarkupReadResult.EmitCurrentAsText;
 	}
 
 	private void ClearCurrentEntity()
@@ -426,5 +447,12 @@ public ref partial struct HtmlReader
 				"HtmlReader was copied after construction. It contains internal references to its own inline storage and must be passed by reference.");
 		}
 #endif
+	}
+
+	private enum MarkupReadResult : byte
+	{
+		EmitCurrentAsText = 0,
+		Continue = 1,
+		ProducedToken = 2,
 	}
 }

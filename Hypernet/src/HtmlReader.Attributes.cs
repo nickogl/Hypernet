@@ -7,7 +7,7 @@ public ref partial struct HtmlReader
 	private static readonly SearchValues<char> _htmlWhitespace = SearchValues.Create(" \t\r\n\f");
 	private static readonly SearchValues<char> _attributeNameStartDisallowed = SearchValues.Create(" \t\r\n\f\"'=<>/`");
 	private static readonly SearchValues<char> _attributeNameTerminators = SearchValues.Create(" \t\r\n\f\"'=<>/`");
-	private static readonly SearchValues<char> _unquotedAttributeTerminators = SearchValues.Create(" \t\r\n\f>/");
+	private static readonly SearchValues<char> _unquotedAttributeTerminators = SearchValues.Create(" \t\r\n\f>");
 
 	/// <summary>
 	/// Tries to get the value of a named attribute from the current start tag.
@@ -29,18 +29,28 @@ public ref partial struct HtmlReader
 		}
 
 		var data = _data[_attributeStart.._attributeEnd];
-		var cursor = 0;
+		var searchCursor = 0;
+		var quoteCursor = 0;
+		var activeQuote = '\0';
 		var firstChar = name[0];
-		while (cursor < data.Length)
+		while (searchCursor < data.Length)
 		{
-			var startIndex = FindAttributeNameStart(data, cursor, firstChar);
+			var startIndex = FindAttributeNameStart(data, searchCursor, firstChar);
 			if (startIndex < 0)
 			{
 				break;
 			}
-			cursor = startIndex;
 
-			var nameStart = cursor++;
+			AdvanceQuoteState(data, ref quoteCursor, startIndex, ref activeQuote);
+			if (activeQuote != '\0' || !IsAttributeNameBoundary(data, startIndex))
+			{
+				searchCursor = startIndex + 1;
+				quoteCursor = searchCursor;
+				continue;
+			}
+
+			var cursor = startIndex + 1;
+			var nameStart = startIndex;
 			var nameTerminatorIndex = data[cursor..].IndexOfAny(_attributeNameTerminators);
 			var nameEnd = nameTerminatorIndex >= 0 ? cursor + nameTerminatorIndex : data.Length;
 			cursor = SkipWhitespace(data, nameEnd);
@@ -65,10 +75,46 @@ public ref partial struct HtmlReader
 				cursor = SkipWhitespace(data, cursor);
 				SkipAttributeValue(data, cursor, out cursor);
 			}
+
+			searchCursor = cursor;
+			quoteCursor = cursor;
+			activeQuote = '\0';
 		}
 
 		value = default;
 		return false;
+	}
+
+	private static bool IsAttributeNameBoundary(scoped ReadOnlySpan<char> data, int startIndex)
+	{
+		if (startIndex == 0)
+		{
+			return true;
+		}
+
+		var previous = data[startIndex - 1];
+		return IsHtmlWhitespace(previous) || previous == '/';
+	}
+
+	private static void AdvanceQuoteState(scoped ReadOnlySpan<char> data, ref int cursor, int endExclusive, ref char activeQuote)
+	{
+		for (var i = cursor; i < endExclusive; i++)
+		{
+			var current = data[i];
+			if (activeQuote == '\0')
+			{
+				if (current is '"' or '\'')
+				{
+					activeQuote = current;
+				}
+			}
+			else if (current == activeQuote)
+			{
+				activeQuote = '\0';
+			}
+		}
+
+		cursor = endExclusive;
 	}
 
 	private static bool TryReadAttribute(ReadOnlySpan<char> data, int cursor, out int nextCursor, out HtmlAttribute attribute)
